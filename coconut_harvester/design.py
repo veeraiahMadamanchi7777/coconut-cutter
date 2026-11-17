@@ -167,7 +167,8 @@ class Design:
 
     def clamps(self, tree: Tree) -> bool:
         lo = self.ring_inner_d - 2 * self.clamp_travel
-        return lo <= min(tree.d_base, tree.d_top) and max(tree.d_base, tree.d_top) <= self.ring_inner_d
+        return (lo <= min(tree.d_base, tree.d_top) and max(tree.d_base, tree.d_top) <= self.ring_inner_d
+                and tree.height <= self.pop.height.hi and tree.lean <= self.pop.lean.hi)
 
     def cut_time(self, peduncle_mm: float) -> float:
         vol_cm3 = self.req.kerf * math.pi * peduncle_mm ** 2 / 4 / 1000.0

@@ -230,7 +230,7 @@ def markdown(d: Design, fleet: FleetSize, pl: Plantation = Plantation(), ops: Op
 # =========================================================================
 # Reimagined concept (inchworm) — drawing and the combined report
 # =========================================================================
-from .inchworm import InchwormDesign  # noqa: E402
+from .inchworm import AL_TUBES, InchwormDesign, size as iw_size  # noqa: E402
 from .inchworm_control import run_mission as iw_mission  # noqa: E402
 
 
@@ -372,6 +372,22 @@ def markdown_full(iw: InchwormDesign, wd: Design, iw_fleet: FleetSize, wd_fleet:
       "self-locking collar would let go mid-cut. So the upper collar also has a small **harvest tensioner**: a "
       f"self-locking lead screw on the strap ({iw.tensioner[0]} N). It clamps positively before the arm may "
       "deploy and slackens only once the arm is stowed again.\n")
+    w("### Real tall palms: 100 ft, leaning, swaying\n")
+    old = iw_size(iw.req, iw.pop, 0.35, 0.10, AL_TUBES[0])
+    mu_w = iw.pop.mu_dry.lo * iw.pop.wet_factor
+    H, lean = iw.pop.height.hi, iw.pop.lean.hi + iw.req.sway_tilt
+    w(f"The first version of this design assumed palms up to 22 m and treated lean far too gently. A real "
+      f"tall-variety palm reaches about 30 m (100 ft), leans, and sways. Three effects were added to the model:\n")
+    w(f"- **Lean:** part of the robot hangs below the upper collar. On a leaning trunk that weight swings back "
+      f"toward the trunk and takes lever away. The original 350 mm arms gave "
+      f"{old.climb_ratio(mu_w, 0, 0):.2f}× grip on a vertical wet trunk but only "
+      f"{old.climb_ratio(mu_w, lean, H):.2f}× at {iw.pop.lean.hi:g}° lean plus sway, against a 1.5× target. "
+      f"The arms are now **{iw.lever * 1000:.0f} mm**, giving {iw.lock_margin_wet:.2f}×.")
+    w(f"- **Rope:** at {H:g} m the robot carries {iw.tether_weight(H) / G:.1f} kg of belay rope.")
+    w(f"- **Sway:** {iw.req.sway_tilt:g}° of extra tilt is allowed for wind sway at the {iw.req.wind_max:g} m/s limit.\n")
+    w(f"**Mounting rule:** the arms go on the side the trunk leans toward. Palms taller than {H:g} m or leaning "
+      f"more than {iw.pop.lean.hi:g}° are refused and go to a manual climber. The first model would have "
+      "attempted them. A 100 ft climb takes about 3 minutes up and 3.5 down.\n")
     w("## 3. Head-to-head\n")
     w("Same tree population, same plantation, same weather years, same service level.\n")
     w("| | Wheel ring (v1) | **Inchworm (v2)** |\n|---|---|---|")

@@ -9,7 +9,7 @@
 The first design (the *wheel ring*, appendix A) clamps six driven wheels onto the trunk and climbs on friction. Its own numbers exposed three structural problems:
 
 1. **Weight:** 39.3 kg, right at the 40 kg two-person limit. Six gearmotors weigh 11.4 kg, and they must be large to push the clamped wheels over leaf-scar ridges.
-2. **Monsoon:** friction-only grip means no climbing on wet bark. That cost 10,391 robot-hours a year, and it is why the estate needed 17 robots.
+2. **Monsoon:** friction-only grip means no climbing on wet bark. That cost 11,198 robot-hours a year, and it is why the estate needed 18 robots.
 3. **Mounting:** closing a hinged ring with six spring arms takes about 100 s per tree, more than the climb itself.
 
 ## 2. The new concept: an inchworm with self-locking collars
@@ -24,7 +24,17 @@ Two collars are joined by one electric cylinder. The robot climbs in four moves:
 
 **Fail-safe:** the release servos are spring-return, so if power is lost both collars lock where they are. Leaf-scar ridges stop mattering, because a released collar has slack and slides over them.
 
-**Found by the physics model:** with the saw swung to the far side of the trunk, the cocking moment nearly cancels (lock ratio 0.00×), and a pure self-locking collar would let go mid-cut. So the upper collar also has a small **harvest tensioner**: a self-locking lead screw on the strap (1000 N). It clamps positively before the arm may deploy and slackens only once the arm is stowed again.
+**Found by the physics model:** with the saw swung to the far side of the trunk, the cocking moment nearly cancels (lock ratio 0.33×), and a pure self-locking collar would let go mid-cut. So the upper collar also has a small **harvest tensioner**: a self-locking lead screw on the strap (1000 N). It clamps positively before the arm may deploy and slackens only once the arm is stowed again.
+
+### Real tall palms: 100 ft, leaning, swaying
+
+The first version of this design assumed palms up to 22 m and treated lean far too gently. A real tall-variety palm reaches about 30 m (100 ft), leans, and sways. Three effects were added to the model:
+
+- **Lean:** part of the robot hangs below the upper collar. On a leaning trunk that weight swings back toward the trunk and takes lever away. The original 350 mm arms gave 1.60× grip on a vertical wet trunk but only 1.05× at 20° lean plus sway, against a 1.5× target. The arms are now **500 mm**, giving 1.65×.
+- **Rope:** at 31 m the robot carries 2.0 kg of belay rope.
+- **Sway:** 3° of extra tilt is allowed for wind sway at the 10 m/s limit.
+
+**Mounting rule:** the arms go on the side the trunk leans toward. Palms taller than 31 m or leaning more than 20° are refused and go to a manual climber. The first model would have attempted them. A 100 ft climb takes about 3 minutes up and 3.5 down.
 
 ## 3. Head-to-head
 
@@ -32,19 +42,19 @@ Same tree population, same plantation, same weather years, same service level.
 
 | | Wheel ring (v1) | **Inchworm (v2)** |
 |---|---|---|
-| Mass | 39.3 kg | **19.0 kg** |
+| Mass | 39.3 kg | **21.5 kg** |
 | Motors | 6 drive + 2 clamp | 1 cylinder + 2 release servos + 1 tensioner |
-| Climbs on wet bark | no | **yes** (lock margin 1.50× at the wettest, slipperiest bark) |
+| Climbs on wet bark | no | **yes** (lock margin 1.65× at the wettest, slipperiest bark) |
 | Climb speed | 0.39 m/s | 0.17 m/s |
 | Mount / dismount | 100 s / 45 s | 45 s / 30 s |
 | Sensitive to leaf-scar ridges | yes (sizes the clamp & motors) | no |
-| Battery / trees per charge (mean tree) | 10 Ah / 26 | 10 Ah / 51 |
-| Trees per robot per 7 productive h | 87 | 84 |
-| Robot-hours lost to wet weather / yr | 10,391 | 1,387 |
-| **Robots for 17,500 palms** | 17 | **7** |
-| Crew | 34 | **14** |
-| Years meeting the round (of 30) | 27 | 30 |
-| Fleet energy / yr | 1,102 kWh | 541 kWh |
+| Battery / trees per charge (mean tree) | 10 Ah / 26 | 10 Ah / 49 |
+| Trees per robot per 7 productive h | 87 | 83 |
+| Robot-hours lost to wet weather / yr | 11,198 | 1,550 |
+| **Robots for 17,500 palms** | 18 | **7** |
+| Crew | 36 | **14** |
+| Years meeting the round (of 30) | 28 | 29 |
+| Fleet energy / yr | 1,090 kWh | 565 kWh |
 
 Per tree the two are about equal: the inchworm climbs more slowly but mounts faster. **All of the fleet saving comes from working through the monsoon.** The sensitivity study below makes that explicit.
 
@@ -54,11 +64,12 @@ Fleet size for the inchworm under pessimistic versions of its key assumptions (e
 
 | Scenario | Mass | Robots |
 |---|---|---|
-| Baseline assumptions | 19.0 kg | 7 |
-| Wet days only 20–50 % workable (vs 50–90 %) | 19.0 kg | 12 |
-| Mounting as slow as the wheel ring (100 s / 45 s) | 19.0 kg | 9 |
-| Wet bark 25 % slicker (μ_wet = 0.45 × dry) (re-optimised design) | 21.5 kg | 7 |
-| Worst case: grounded on wet bark like the wheel robot (isolates the monsoon effect) | 19.0 kg | 17 |
+| Baseline assumptions | 21.5 kg | 7 |
+| Wet days only 20–50 % workable (vs 50–90 %) | 21.5 kg | 12 |
+| Mounting as slow as the wheel ring (100 s / 45 s) | 21.5 kg | 9 |
+| Wet bark 25 % slicker (μ_wet = 0.45 × dry) (re-optimised design) | 22.0 kg | 7 |
+| Old tall estate: most palms 20–28 m, tallest 31 m (100 ft) (same robot) | 21.5 kg | 11 |
+| Worst case: grounded on wet bark like the wheel robot (isolates the monsoon effect) | 21.5 kg | 17 |
 
 Even if rainy days turn out to be mostly unworkable, the inchworm needs fewer robots. If it is grounded on wet bark just like the wheel ring, it needs the same number, because the advantage *is* wet-weather operation. Wet-bark self-lock and workable rain hours are therefore the two things to measure first (section 9).
 
@@ -66,48 +77,49 @@ Even if rainy days turn out to be mostly unworkable, the inchworm needs fewer ro
 
 | Item | Result |
 |---|---|
-| Mass | **19.0 kg**: one person can lift it; two mount it |
-| Collars | Lever 350 mm, pad-to-strap bite 100 mm, 30×30×2 6061-T6 arms, steel-cored strap, 600 mm constant-force take-up reel |
+| Mass | **21.5 kg**: one person can lift it; two mount it |
+| Collars | Lever 500 mm, pad-to-strap bite 100 mm, 40×40×3 6061-T6 arms, steel-cored strap, 600 mm constant-force take-up reel |
 | Cylinder | EC-08: 800 N, BLDC ball screw, spring brake, 400 mm stroke |
 | Step / speed | 392 mm per step; 0.17 m/s up, 0.15 m/s down |
-| Harvest tensioner | 1000 N self-locking lead screw, clamps 684 N |
+| Harvest tensioner | 1000 N self-locking lead screw, clamps 584 N |
 | Saw | Ø235 mm TCT, 150 W BLDC, reach 700 mm, 360° slew |
 | Battery | 24 V 10 Ah (252 Wh), hung at the lower arm tip as counterweight |
 
 | Subsystem | kg |
 |---|---|
-| upper collar (arm, V-pad, strap, reel, servo) | 2.86 |
+| upper collar (arm, V-pad, strap, reel, servo) | 3.99 |
 | harvest strap tensioner | 0.80 |
-| lower collar (arm, V-pad, strap, reel, servo) | 2.86 |
+| lower collar (arm, V-pad, strap, reel, servo) | 3.99 |
 | electric cylinder + brake | 3.60 |
 | harvest arm (slew ring, boom) | 2.05 |
 | saw unit (motor, blade, guard) | 1.83 |
 | battery | 2.10 |
 | electronics, camera, radio | 1.50 |
-| fasteners & wiring (8 %) | 1.41 |
+| fasteners & wiring (8 %) | 1.59 |
 
 ## 6. Engineering checks
 
 | Check | Value | Limit | Status |
 |---|---|---|---|
 | Sizing converged | 1.00  | ≥ 1 | PASS |
-| Self-lock while climbing, wet bark, max lean | 1.50 x | ≥ 1.5 | PASS |
-| Harvest hold, wet bark, saw on far side, max lean | 1.54 x | ≥ 1.5 | PASS |
-| Harvest tensioner rating | 1.46 x | ≥ 1.2 | PASS |
-| Strap tension safety factor | 6.05 x | ≥ 4 | PASS |
-| Pad pressure on bark | 0.24 MPa | ≤ 0.6 | PASS |
-| Arm stress range vs Al weld fatigue | 16.25 MPa | ≤ 18.5185 | PASS |
-| Arm tip deflection | 0.64 mm | ≤ 5 | PASS |
-| Cylinder force margin | 3.77 x | ≥ 1 | PASS |
+| Self-lock while climbing: wet bark, 20° lean + sway, 31 m up | 1.65 x | ≥ 1.5 | PASS |
+| Self-lock while climbing: wet bark, vertical trunk | 2.25 x | ≥ 1.5 | PASS |
+| Harvest hold: wet bark, saw on far side, 20° lean + sway, 31 m up | 1.55 x | ≥ 1.5 | PASS |
+| Harvest tensioner rating | 1.71 x | ≥ 1.2 | PASS |
+| Strap tension safety factor | 5.29 x | ≥ 4 | PASS |
+| Pad pressure on bark | 0.28 MPa | ≤ 0.6 | PASS |
+| Arm stress range vs Al weld fatigue | 9.11 MPa | ≤ 18.5185 | PASS |
+| Arm tip deflection | 0.55 mm | ≤ 5 | PASS |
+| Cylinder force margin | 3.08 x | ≥ 1 | PASS |
 | Average climb speed | 0.17 m/s | ≥ 0.15 | PASS |
 | Strap take-up reel covers worst taper | 600.00 mm | ≥ 551.398 | PASS |
 | Release slack clears tallest ridge | 25.00 mm | ≥ 20 | PASS |
 | Blade cuts thickest stalk in one pass | 82.50 mm | ≥ 75 | PASS |
 | Cut time, thickest stalk | 9.42 s | ≤ 10 | PASS |
-| Trees per battery charge (mean tree) | 51.02  | ≥ 20 | PASS |
-| Full battery covers worst tree + reserve | 15.71 x | ≥ 1 | PASS |
-| Robot mass (one-person lift) | 19.00 kg | ≤ 25 | PASS |
-| Belay tether safety factor | 40.24 x | ≥ 10 | PASS |
+| Trees per battery charge (mean tree) | 48.72  | ≥ 20 | PASS |
+| Full battery covers worst tree + reserve | 11.97 x | ≥ 1 | PASS |
+| Robot mass (one-person lift) | 21.46 kg | ≤ 25 | PASS |
+| Belay tether safety factor | 32.57 x | ≥ 10 | PASS |
 
 ## 7. Closed loop
 
@@ -116,9 +128,9 @@ Even if rainy days turn out to be mostly unworkable, the inchworm needs fewer ro
 | Metric | Value |
 |---|---|
 | Completed with no faults, no falls | 300/300 |
-| Mission time mean / max | 148 s / 258 s |
-| Energy per tree mean / max | 2.9 / 5.1 Wh |
-| Inchworm steps per mission (mean) | 58 |
+| Mission time mean / max | 150 s / 275 s |
+| Energy per tree mean / max | 3.1 / 5.4 Wh |
+| Inchworm steps per mission (mean) | 59 |
 
 The test suite also injects sap patches (sudden friction loss, so the robot slips, faults and holds), radio loss mid-step (both collars lock and the robot does not move), and low battery (it comes home with charge to spare).
 
@@ -153,7 +165,7 @@ Verification:
 
 ## Appendix A: wheel-ring concept (v1)
 
-Kept in `coconut_harvester/design.py` and `controller.py`, and still fully tested, so the comparison stays honest. Drawing: [wheel_robot.svg](wheel_robot.svg). Mass 39.3 kg, 0.39 m/s, clamp preload 530 N per wheel, 17 robots for this estate.
+Kept in `coconut_harvester/design.py` and `controller.py`, and still fully tested, so the comparison stays honest. Drawing: [wheel_robot.svg](wheel_robot.svg). Mass 39.3 kg, 0.39 m/s, clamp preload 530 N per wheel, 18 robots for this estate.
 
 | Check | Value | Limit | Status |
 |---|---|---|---|
@@ -168,7 +180,7 @@ Kept in `coconut_harvester/design.py` and `controller.py`, and still fully teste
 | Clamp actuator force | 1.84 x | ≥ 1 | PASS |
 | Blade cuts thickest stalk in one pass | 82.50 mm | ≥ 75 | PASS |
 | Cut time, thickest stalk | 9.42 s | ≤ 10 | PASS |
-| Trees per battery charge (mean tree) | 25.99  | ≥ 20 | PASS |
-| Full battery covers worst tree + reserve | 9.06 x | ≥ 1 | PASS |
+| Trees per battery charge (mean tree) | 25.66  | ≥ 20 | PASS |
+| Full battery covers worst tree + reserve | 6.82 x | ≥ 1 | PASS |
 | Robot mass (two-person carry) | 39.31 kg | ≤ 40 | PASS |
 | Belay tether safety factor | 19.45 x | ≥ 10 | PASS |

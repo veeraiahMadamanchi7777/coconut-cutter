@@ -8,7 +8,7 @@ from typing import List, Optional
 from . import design as wheel
 from . import inchworm
 from .fleet import FleetSize, Ops, Plantation, fleet_needed
-from .tree import TreePopulation, Weather
+from .tree import TALL_ESTATE, TreePopulation, Weather
 
 
 @dataclass
@@ -35,6 +35,8 @@ def sensitivity(iw: inchworm.InchwormDesign, pl: Plantation = Plantation()) -> L
         run("Wet bark 25 % slicker (μ_wet = 0.45 × dry)", slick, note="re-optimised design")
     except RuntimeError:
         rows.append(Row("Wet bark 25 % slicker (μ_wet = 0.45 × dry)", None, None, "no design passes"))
+    tall = inchworm.optimize(iw.req, TALL_ESTATE)
+    run("Old tall estate: most palms 20–28 m, tallest 31 m (100 ft)", tall, note="same robot")
     grounded = copy.copy(iw)
     grounded.climbs_wet = False
     run("Worst case: grounded on wet bark like the wheel robot", grounded,

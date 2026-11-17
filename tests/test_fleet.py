@@ -117,3 +117,11 @@ def test_inchworm_fast_path_energy(iw):
         fast = iw.energy_base(t) + sum(iw.saw_w * (iw.cut_time(p) + 3) / 3600 + 0.06 + elec * Ops().aim_s
                                        for p in peds)
         assert fast == pytest.approx(iw.energy_tree(t, peds, dwell_s=len(peds) * Ops().aim_s), rel=1e-12)
+
+
+def test_tall_estate_takes_longer_per_tree(iw):
+    from coconut_harvester.tree import TALL_ESTATE
+    a = simulate_year(iw, 3, SMALL, seed=6, days=120)
+    b = simulate_year(iw, 3, SMALL, seed=6, days=120, pop=TALL_ESTATE)
+    assert b.manual == 0                      # every tall palm is inside the envelope
+    assert b.climb_hours > 1.6 * a.climb_hours * b.harvests / a.harvests

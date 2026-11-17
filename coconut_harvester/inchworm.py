@@ -86,6 +86,9 @@ class Requirements:
     transition_s: float = 0.25      # s per release or lock
     tether_mbs: float = 15_000.0
     tether_sf: float = 10.0
+    tether_kg_per_m: float = 0.065  # 10 mm belay rope; the robot carries what hangs below it
+    sway_tilt: float = 3.0          # deg, extra trunk tilt from wind sway at the operating wind limit
+    lean_misalign: float = 6.0      # deg of lean that may act the wrong way (S-curve, mounting error)
 
 
 @dataclass
@@ -105,6 +108,8 @@ class InchwormDesign:
     mass_breakdown: Dict[str, float] = field(default_factory=dict)
     m_upper: float = 0.0     # kg moving with the upper collar (collar, arm, saw, cylinder body)
     m_lower: float = 0.0     # kg moving with the lower collar (collar, battery box)
+    cg_z_upper: float = 0.0  # m, CG below the upper collar when it carries the robot (worst stroke)
+    cg_z_lower: float = 0.0  # m, CG above the lower collar when it carries the robot (worst stroke)
     tensioner: Tuple[int, float] = (0, 0.0)
     N_active: float = 0.0    # N, strap clamp force the tensioner applies in harvest mode
     lock_margin_wet: float = 0.0
@@ -147,41 +152,62 @@ class InchwormDesign:
         rest = self.mass - m_saw - m_boom
         return G * (rest * self.lever * 0.85 + (m_saw + 0.5 * m_boom) * arm_x) - self.req.feed_force * max(0, -arm_x)
 
+    def tether_weight(self, height: float) -> float:
+        """Weight [N] of belay rope hanging from the robot at ``height`` m."""
+        return self.req.tether_kg_per_m * max(0.0, height) * G
+
     def lock_ratio(self, mu: float, arm_x: float, carried: Optional[float] = None,
-                   active: float = 0.0) -> float:
-        """Friction capacity / load for a collar carrying ``carried`` N (default: whole robot).
+                   active: float = 0.0, lean: float = 0.0, height: float = 0.0) -> float:
+        """Friction capacity / axial load for one collar holding the robot.
 
-        ``active`` is extra strap clamp force from the harvest tensioner. A negative
-        cocking moment (saw on the far side) eats into it."""
-        W = self.weight if carried is None else carried
-        M = self.cocking_moment(arm_x) if carried is None else carried * self.lever * 0.85
+        ``carried=None``: the UPPER collar holds everything (lower one moving, or harvesting).
+        ``carried=W``: the LOWER collar holds everything (upper one moving).
+        ``active``: strap clamp force from the harvest tensioner.
+        ``lean`` [deg]: trunk lean. Mounting rule: the arms go on the side the trunk
+        leans toward. Then the CG that hangs BELOW the upper collar swings back toward
+        the trunk and takes lever away (W·|z|·sinθ), while the CG ABOVE the lower collar
+        swings outward and helps. Only ``lean_misalign`` degrees are assumed to act
+        the wrong way on the lower collar (S-curved trunk, mounting error).
+        ``height`` [m]: adds the weight of belay rope hanging from the arm tip.
+        """
+        Wt = self.tether_weight(height)
+        th = math.radians(lean)
+        if carried is None:
+            W = self.weight + Wt
+            M = (self.cocking_moment(arm_x) + Wt * self.lever) * math.cos(th) \
+                - self.weight * self.cg_z_upper * math.sin(th)
+        else:
+            W = carried + Wt
+            tm = math.radians(min(lean, self.req.lean_misalign))
+            M = (carried * self.lever * 0.85 + Wt * self.lever) * math.cos(tm) \
+                - carried * self.cg_z_lower * math.sin(tm)
         N = max(0.0, active + M / self.pad_span) if active else max(0.0, M) / self.pad_span
-        return 2 * mu * N / W
+        return 2 * mu * N / (W * math.cos(th))
 
-    def harvest_ratio(self, mu: float) -> float:
+    def harvest_ratio(self, mu: float, lean: float = 0.0, height: float = 0.0) -> float:
         """Upper collar, tensioner engaged, saw on the worst (far) side."""
-        return self.lock_ratio(mu, -self.reach, active=self.N_active)
+        return self.lock_ratio(mu, -self.reach, active=self.N_active, lean=lean, height=height)
 
-    def climb_ratio(self, mu: float) -> float:
+    def climb_ratio(self, mu: float, lean: float = 0.0, height: float = 0.0) -> float:
         """Self-lock with the saw stowed: the worse of the two collars."""
-        up = self.lock_ratio(mu, ARM_STOW_X)
-        lo = self.lock_ratio(mu, 0.0, carried=self.weight)
+        up = self.lock_ratio(mu, ARM_STOW_X, lean=lean, height=height)
+        lo = self.lock_ratio(mu, 0.0, carried=self.weight, lean=lean, height=height)
         return min(up, lo)
 
     def holds(self, tree: Tree, wet: bool) -> bool:
         mu = tree.mu_dry * (self.pop.wet_factor if wet else 1.0)
-        lean = math.cos(math.radians(tree.lean))
-        return (self.fits(tree) and self.harvest_ratio(mu) * lean >= 1.15
-                and self.climb_ratio(mu) * lean >= 1.15)
+        lean = tree.lean + self.req.sway_tilt
+        return (self.fits(tree) and self.harvest_ratio(mu, lean, tree.height) >= 1.15
+                and self.climb_ratio(mu, lean, tree.height) >= 1.15)
 
     def fits(self, tree: Tree) -> bool:
-        lo = self.pop.d_min
-        return lo <= min(tree.d_base, tree.d_top) and max(tree.d_base, tree.d_top) <= self.pop.d_max
+        """Inside the design envelope: trunk diameter, height and lean."""
+        return (self.pop.d_min <= min(tree.d_base, tree.d_top)
+                and max(tree.d_base, tree.d_top) <= self.pop.d_max
+                and tree.height <= self.pop.height.hi and tree.lean <= self.pop.lean.hi)
 
     def can_climb(self, tree: Tree, wet: bool) -> bool:
-        mu = tree.mu_dry * (self.pop.wet_factor if wet else 1.0)
-        lean = math.cos(math.radians(tree.lean))
-        return self.fits(tree) and self.climb_ratio(mu) * lean >= 1.15 and self.holds(tree, wet)
+        return self.holds(tree, wet)
 
     def can_hold(self, tree: Tree, wet: bool) -> bool:
         return self.holds(tree, wet)
@@ -231,6 +257,7 @@ class InchwormDesign:
         drag = 2 * self.pop.mu_dry.hi * self.req.strap_preload * 0.3
         F = self.weight + 2 * drag
         e = F * height / (self.req.eta_screw * self.req.eta_elec)
+        e += self.tether_weight(height) * height / 2 / (self.req.eta_screw * self.req.eta_elec)  # rope
         e += self.steps(height) * 4 * 5.0  # release servos, J per transition
         return e / 3600.0
 
@@ -299,9 +326,12 @@ def size(req: Requirements, pop: TreePopulation, lever: float, pad_span: float, 
         collar = 2 * arm_len * tube[2] + 0.9 + 0.4 + 0.4 + 0.35  # arm tubes, V-pad, strap, reel, release servo
         # harvest tensioner: clamp so the upper collar alone holds the robot, wet, saw far side
         mu_wet = pop.mu_dry.lo * pop.wet_factor
-        M_far = d.cocking_moment(-d.reach) if d.mass_breakdown else 0.0
-        lean = math.cos(math.radians(pop.lean.hi))
-        d.N_active = max(0.0, req.sf_lock * mass * G / (2 * mu_wet * lean) - M_far / pad_span) * 1.02
+        th = math.radians(pop.lean.hi + req.sway_tilt)
+        Wt = d.tether_weight(h_max)
+        M_far = ((d.cocking_moment(-d.reach) if d.mass_breakdown else 0.0) + Wt * lever) * math.cos(th) \
+            - mass * G * d.cg_z_upper * math.sin(th)
+        d.N_active = max(0.0, req.sf_lock * (mass * G + Wt) * math.cos(th) / (2 * mu_wet)
+                         - M_far / pad_span) * 1.03
         d.tensioner = _pick(TENSIONERS, lambda t: t[0] >= 1.2 * d.N_active) or TENSIONERS[-1]
         mb = {
             "upper collar (arm, V-pad, strap, reel, servo)": collar,
@@ -319,6 +349,13 @@ def size(req: Requirements, pop: TreePopulation, lever: float, pad_span: float, 
         d.m_upper = mb["upper collar (arm, V-pad, strap, reel, servo)"] + m_boom + m_saw_unit + m_cyl * 0.6 \
             + 1.5 + mb["fasteners & wiring (8 %)"] / 2
         d.m_lower = new - d.m_upper
+        # Axial CG offsets at full extension (worst case), from the layout.
+        sep = 0.56 + d.stroke / 1000.0
+        fast = mb["fasteners & wiring (8 %)"] / 2
+        up_parts = [(collar + d.tensioner[1] + 1.5 + fast, 0.0), (m_boom, 0.35), (m_saw_unit, 0.60), (m_cyl, -0.30)]
+        lo_parts = [(collar + fast, 0.0), (mb["battery"], -0.13)]
+        d.cg_z_upper = -(sum(m * z for m, z in up_parts) + sum(m * (z - sep) for m, z in lo_parts)) / new
+        d.cg_z_lower = (sum(m * (z + sep) for m, z in up_parts) + sum(m * z for m, z in lo_parts)) / new
         if abs(new - mass) < 0.005:
             d.mass, d.converged = new, True
             break
@@ -340,14 +377,19 @@ def _checks(d: InchwormDesign) -> None:
         return
     mu_wet = pop.mu_dry.lo * pop.wet_factor
     W = d.weight
-    lean = math.cos(math.radians(pop.lean.hi))
-    # Climbing: pure self-lock, saw stowed, either collar alone carrying the robot.
-    r_c = d.climb_ratio(mu_wet) * lean
+    lean, H = pop.lean.hi + req.sway_tilt, pop.height.hi
+    # Climbing: pure self-lock, saw stowed, either collar alone carrying the robot,
+    # at the top of the tallest tree (most rope), max lean plus wind sway.
+    r_c = d.climb_ratio(mu_wet, lean, H)
     d.lock_margin_wet = r_c
-    C(Check("Self-lock while climbing, wet bark, max lean", r_c, req.sf_lock, "x", r_c >= req.sf_lock))
+    C(Check(f"Self-lock while climbing: wet bark, {pop.lean.hi:g}° lean + sway, {H:g} m up", r_c, req.sf_lock,
+            "x", r_c >= req.sf_lock))
+    r_v = d.climb_ratio(mu_wet, 0.0, 0.0)
+    C(Check("Self-lock while climbing: wet bark, vertical trunk", r_v, req.sf_lock, "x", r_v >= req.sf_lock))
     # Harvesting: tensioner engaged, saw on the far side (cocking moment fights the grip).
-    r_h = d.harvest_ratio(mu_wet) * lean
-    C(Check("Harvest hold, wet bark, saw on far side, max lean", r_h, req.sf_lock, "x", r_h >= req.sf_lock))
+    r_h = d.harvest_ratio(mu_wet, lean, H)
+    C(Check(f"Harvest hold: wet bark, saw on far side, {pop.lean.hi:g}° lean + sway, {H:g} m up", r_h,
+            req.sf_lock, "x", r_h >= req.sf_lock))
     C(Check("Harvest tensioner rating", d.tensioner[0] / max(d.N_active, 1.0), 1.2, "x",
             d.tensioner[0] >= 1.2 * d.N_active))
     M = max(d.cocking_moment(+d.reach), W * d.lever * 0.85)
@@ -363,7 +405,7 @@ def _checks(d: InchwormDesign) -> None:
     L = d.lever * 1000
     defl = (M / d.lever) / 2 * L ** 3 / (3 * 69_000 * I)
     C(Check("Arm tip deflection", defl, req.max_deflection, "mm", defl <= req.max_deflection, "≤"))
-    F_need = 1.5 * (d.m_upper * G + 2 * pop.mu_dry.hi * req.strap_preload * 0.3)
+    F_need = 1.5 * (d.m_upper * G + d.tether_weight(pop.height.hi) + 2 * pop.mu_dry.hi * req.strap_preload * 0.3)
     C(Check("Cylinder force margin", d.cylinder[1] / F_need, 1.0, "x", d.cylinder[1] >= F_need))
     C(Check("Average climb speed", d.speed, req.min_speed, "m/s", d.speed >= req.min_speed))
     take_up = math.pi * (pop.d_max - pop.d_max * pop.taper.lo) + 50
@@ -385,7 +427,7 @@ def _checks(d: InchwormDesign) -> None:
     C(Check("Full battery covers worst tree + reserve", d.battery_wh * req.battery_dod / worst_e, 1.0, "x",
             d.battery_wh * req.battery_dod >= worst_e))
     C(Check("Robot mass (one-person lift)", d.mass, req.max_mass, "kg", d.mass <= req.max_mass, "≤"))
-    arrest = 2.0 * W
+    arrest = 2.0 * (W + d.tether_weight(pop.height.hi))
     C(Check("Belay tether safety factor", req.tether_mbs / arrest, req.tether_sf, "x",
             req.tether_mbs / arrest >= req.tether_sf))
 

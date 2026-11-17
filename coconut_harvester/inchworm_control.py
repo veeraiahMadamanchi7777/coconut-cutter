@@ -357,12 +357,11 @@ class IPlant:
     def _holds(self, which: str) -> bool:
         """Does a locked collar hold its current load?"""
         d = self.d
-        lean = math.cos(math.radians(self.tree.lean))
         arm_x = ARM_STOW_X if self.arm <= 0 else -d.reach  # assume worst slew when deployed
         if which == "upper":
             active = d.N_active * self.tension
-            return d.lock_ratio(self.mu, arm_x, active=active) * lean >= 1.0
-        return d.lock_ratio(self.mu, 0.0, carried=d.weight) * lean >= 1.0
+            return d.lock_ratio(self.mu, arm_x, active=active, lean=self.tree.lean, height=self.z_u) >= 1.0
+        return d.lock_ratio(self.mu, 0.0, carried=d.weight, lean=self.tree.lean, height=self.z_u) >= 1.0
 
     def step(self, o: IOutputs, dt: float = DT) -> None:
         d = self.d
@@ -382,7 +381,7 @@ class IPlant:
                 self.z_l = max(0.0, self.z_l - 1.0 * dt)
             elif o.act and up_free != lo_free:
                 drag = 2 * d.pop.mu_dry.hi * d.req.strap_preload * 0.3
-                load = (d.m_upper if up_free else d.m_lower) * G + drag
+                load = (d.m_upper if up_free else d.m_lower) * G + drag + (d.tether_weight(self.z_u) if up_free else 0.0)
                 going_up = (o.act > 0) == up_free
                 v = d.speed_at(load) if going_up else d.speed_at(drag) * 0.8
                 da = o.act * v * dt

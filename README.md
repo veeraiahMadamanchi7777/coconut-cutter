@@ -11,7 +11,7 @@ The repo holds two concepts, compared head to head in the same models:
 
 **Interactive 3D model:** [`docs/robot_3d.html`](docs/robot_3d.html) (open in a browser).
 
-**Video: why the arm sticks out while climbing:** [`docs/video/why_the_arm.mp4`](docs/video/why_the_arm.mp4) (83 s; source `docs/video/why_the_arm.html`, regenerate with `node docs/video/render.js docs/video/why_the_arm.mp4`).
+**Video: why the arm sticks out while climbing:** [`docs/video/why_the_arm.mp4`](docs/video/why_the_arm.mp4) (98 s; source `docs/video/why_the_arm.html`, regenerate with `node docs/video/render.js docs/video/why_the_arm.mp4`).
 
 **Full report:** [`docs/DESIGN.md`](docs/DESIGN.md), generated from the models: drawings, checks,
 comparison, sensitivity and safety.
@@ -22,15 +22,17 @@ comparison, sensitivity and safety.
 
 | | Wheel ring (v1) | **Inchworm (v2)** |
 |---|---|---|
-| Mass | 39.3 kg | **19.0 kg** |
+| Mass | 39.3 kg | **21.5 kg** |
 | Climbs wet bark | no | **yes** |
 | Leaf-scar ridges matter | yes, they size the motors | no |
-| Robots for a 100 ha / 17,500-palm estate | 17 | **7** |
+| Robots for a 100 ha / 17,500-palm estate | 18 | **7** |
+| Tallest palm | 31 m (100 ft) | 31 m (100 ft), leaning up to 20° |
 
 Per tree the two are about equal: v2 climbs more slowly but straps on faster. **The fleet saving comes
 entirely from working through the monsoon.** v1 loses about 10,000 robot-hours a year to wet bark.
-Even under pessimistic assumptions v2 needs 9–12 robots. If it turned out not to climb wet bark
-after all, it would need 17, the same as v1. So the first thing to measure is wet-bark self-lock
+Even under pessimistic assumptions v2 needs 9–12 robots, and 11 on an old estate where most
+palms are 20–28 m tall. If it turned out not to climb wet bark after all, it would need 17,
+about the same as v1. So the first thing to measure is wet-bark self-lock
 on real trunks.
 
 ## How v2 works
@@ -67,7 +69,7 @@ coconut_harvester/
 
 ```bash
 pip install -e ".[test]"
-pytest -q                      # 74 tests, ~3 min on 4 cores
+pytest -q                      # 80 tests, ~3 min on 4 cores
 pytest -q -s -m prodscale      # 1,000 ha estates + 20k (v1) / 5k (v2) closed-loop missions
 coconut-harvester report       # regenerate docs/ (~5 min; CI fails if it drifts)
 coconut-harvester simulate --robots 7 --concept inchworm
@@ -87,7 +89,10 @@ coconut-harvester simulate --robots 7 --concept inchworm
   - **Sap patch:** the robot slips, faults and holds.
   - **Radio loss mid-step:** both collars lock and the robot doesn't move.
   - **Low battery:** the robot comes home with charge to spare.
-- **Plantation.** 7 robots meet the harvest round in every one of 30 simulated weather years and
+- **100 ft palms.** Full missions on a 30.5 m palm pass, wet and dry, at 0–20° lean. The original
+  350 mm arms fail this check (grip 1.05× against a 1.5× target), and a regression test keeps it
+  that way. Palms beyond 31 m or 20° lean are refused.
+- **Plantation.** 7 robots meet the harvest round in 29 of 30 simulated weather years and
   in 10 fresh ones. 6 robots do not.
 
 ## Assumptions to replace before building

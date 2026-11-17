@@ -337,3 +337,49 @@ def test_low_battery_forces_safe_return(iw):
     r = run_mission(iw, t, [60.0, 60.0], plant=p)
     assert r.reason != "timeout" and not r.fell
     assert p.z_l <= 0.02 and p.battery_wh > 0
+
+
+# ------------------------------------------------- real tall palms (100 ft)
+
+FT100 = 30.48
+
+
+def test_100ft_tree_wet_and_leaning_full_missions(iw):
+    base = iw.pop.sample(random.Random(5))
+    for lean in (0.0, 10.0, 20.0):
+        for wet in (False, True):
+            t = replace(base, height=FT100, d_base=330, d_top=205, lean=lean, mu_dry=iw.pop.mu_dry.lo)
+            r = run_mission(iw, t, [70.0, 70.0], wet=wet, rng=random.Random(2), max_time=3000)
+            assert r.ok and not r.fell and not r.faults, (lean, wet, r)
+            assert r.steps == 2 * iw.steps(FT100 - 0.56 - 0.3) or r.steps >= 140
+            assert r.energy_wh < 0.1 * iw.battery_wh  # one 100 ft tree uses a small share of a pack
+
+
+def test_original_short_arm_design_fails_real_tree_physics():
+    """Regression for the flaw a 100 ft leaning palm exposed: 350 mm arms pass on a
+    vertical trunk but lose their margin when the trunk leans and the rope gets long."""
+    old = size(Requirements(), TreePopulation(), 0.35, 0.10, AL_TUBES[0])
+    assert not old.ok
+    assert any("lean" in c.name for c in old.failed())
+    mu_wet = old.pop.mu_dry.lo * old.pop.wet_factor
+    assert old.climb_ratio(mu_wet, 0.0, 0.0) >= 1.5           # looked fine without lean
+    assert old.climb_ratio(mu_wet, 23.0, FT100) < 1.1         # nearly slipping on the real tree
+
+
+def test_lean_takes_grip_away_monotonically(iw):
+    mu_wet = iw.pop.mu_dry.lo * iw.pop.wet_factor
+    rs = [iw.lock_ratio(mu_wet, 0.2, lean=a, height=FT100) for a in (0, 5, 10, 15, 20, 25)]
+    assert rs == sorted(rs, reverse=True) and rs[0] > rs[-1]
+    assert iw.climb_ratio(mu_wet, iw.pop.lean.hi + iw.req.sway_tilt, iw.pop.height.hi) >= iw.req.sf_lock
+
+
+def test_trees_beyond_the_envelope_are_refused_not_attempted(iw):
+    t = iw.pop.sample(random.Random(1))
+    assert iw.pop.height.hi >= FT100
+    assert not iw.can_climb(replace(t, height=iw.pop.height.hi + 2), wet=False)
+    assert not iw.can_climb(replace(t, lean=iw.pop.lean.hi + 5), wet=False)
+
+
+def test_rope_weight_costs_energy_on_tall_trees(iw):
+    assert iw.tether_weight(FT100) == pytest.approx(0.065 * FT100 * 9.81)
+    assert iw.energy_climb(30) / 30 > iw.energy_climb(10) / 10

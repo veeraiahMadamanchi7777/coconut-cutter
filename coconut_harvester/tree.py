@@ -57,7 +57,7 @@ class Tree:
 
 @dataclass(frozen=True)
 class TreePopulation:
-    height: Dist = Dist(12.0, 4.0, 4.0, 22.0)
+    height: Dist = Dist(12.0, 4.0, 4.0, 31.0)        # tall varieties reach ~30 m (100 ft)
     d_base: Dist = Dist(310.0, 35.0, 230.0, 420.0)
     taper: Dist = Dist(0.80, 0.07, 0.62, 0.98)       # d_top / d_base
     lean: Dist = Dist(5.0, 4.0, 0.0, 20.0)
@@ -134,6 +134,10 @@ class TreePopulation:
             bunch_mass=base.bunch_mass,
             bunches_per_month=base.bunches_per_month,
         )
+
+
+# An old estate of tall-variety palms: most 20-28 m, the tallest about 100 ft.
+TALL_ESTATE = TreePopulation(height=Dist(24.0, 4.0, 12.0, 31.0), lean=Dist(8.0, 5.0, 0.0, 20.0))
 
 
 # Probability that a given day has wet bark in the morning, by month (Kerala-like

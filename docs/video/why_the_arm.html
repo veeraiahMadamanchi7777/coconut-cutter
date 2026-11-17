@@ -9,10 +9,11 @@
 <script>
 // Explainer: why each collar's arm sticks out while the robot climbs.
 // Deterministic: draw(t) renders the frame at time t (s). Numbers come from the sized design
-// (coconut_harvester/inchworm.py): 19.0 kg robot, pad-to-strap bite h = 100 mm, wet bark μ = 0.30,
-// weight acts 267 mm from the trunk axis with the saw parked (arm tip at 350 mm).
-const P = { W: 186.4, h: 0.10, muWet: 0.30, Leff: 0.2667, Larm: 0.35, R: 0.155,
-            Mstow: 49.7, Mfar: -17.5, Nact: 684, xStow: 0.20, xFar: -0.70 };
+// (coconut_harvester/inchworm.py): 21.5 kg robot, pad-to-strap bite h = 100 mm, wet bark μ = 0.30,
+// weight acts 375 mm from the trunk axis with the saw parked (arm tip at 500 mm).
+const P = { W: 210.5, h: 0.10, muWet: 0.30, Leff: 0.3748, Larm: 0.50, R: 0.155,
+            Mstow: 78.9, Mfar: 11.7, Nact: 584, xStow: 0.20, xFar: -0.70, zcg: 0.287, Wt: 19.8,
+            old: { W: 186.4, Mstow: 49.7, Larm: 0.35, zcg: 0.26 } };
 const C = { bg: "#10161a", panel: "#18222a", ink: "#eef3f1", muted: "#93a39c", line: "#2a3740",
             bark: "#8c7354", barkDark: "#5f4c35", strap: "#e9a046", free: "#8d9592", metal: "#c3ccd3",
             weight: "#ef6a5b", normal: "#62b3ef", fric: "#74d39b", saw: "#e0473c", ok: "#74d39b", bad: "#ef6a5b" };
@@ -126,7 +127,7 @@ add(4.5, (t) => {
   const a = clamp(t / 0.8);
   text("Why the arm sticks out", 640, 300, 64, C.ink, 800, "center", a);
   text("while the robot climbs", 640, 372, 44, C.strap, 600, "center", a);
-  text("Inchworm palm robot · 19.0 kg · wet bark μ = 0.30", 640, 450, 24, C.muted, 500, "center", clamp((t - 0.6) / 0.8));
+  text("Inchworm palm robot · 21.5 kg · wet bark μ = 0.30", 640, 450, 24, C.muted, 500, "center", clamp((t - 0.6) / 0.8));
 });
 
 // 1. the question
@@ -139,9 +140,9 @@ add(7, (t, d) => {
   const k = 0.5 + 0.5 * Math.sin(t * 4);
   g.save(); g.strokeStyle = C.strap; g.globalAlpha = 0.35 + 0.4 * k; g.lineWidth = 3;
   g.beginPath(); g.ellipse(cx + 170, y + 50, 140, 260, 0, 0, Math.PI * 2); g.stroke(); g.restore();
-  text("350 mm", cx + 260, y + 60, 26, C.strap, 700);
+  text("500 mm", cx + 260, y + 60, 26, C.strap, 700);
   text("from trunk axis", cx + 260, y + 92, 20, C.muted, 500);
-  caption("Each collar has an arm sticking out 350 mm from the trunk. It does not reach anything. It is what makes the collar grip.", clamp((t - 0.8) / 0.8));
+  caption("Each collar has an arm sticking out 500 mm from the trunk. It does not reach anything. It is what makes the collar grip.", clamp((t - 0.8) / 0.8));
 });
 
 // 2. no arm: the collar just slides
@@ -159,7 +160,7 @@ add(8, (t) => {
   arrow(cx, y + 118, cx, y + 190, C.weight, 5);
   text("W", cx + 14, y + 180, 22, C.weight, 700);
   readout(760, 120, [["Load lever L", "0 mm"], ["Moment M = W·L", "0 N·m"], ["Bite force N = M/h", "0 N"],
-                     ["Friction 2μN", "0 N", C.bad], ["Weight W", "186 N", C.weight]]);
+                     ["Friction 2μN", "0 N", C.bad], ["Weight W", "211 N", C.weight]]);
   status(760, 380, tt > 0);
   text("slow motion", 760, 460, 18, C.muted, 500);
   caption("No arm: the weight hangs on the trunk axis. Nothing tips the collar, so nothing presses it on the bark. It slides straight down.", clamp((t - 0.6) / 0.8));
@@ -202,13 +203,13 @@ add(16, (t, d) => {
   text("h = 100 mm", cx - hw - 190, (sy + py) / 2 + 7, 18, C.muted, 600);
   readout(700, 60, [["Load lever L", (L * 1000).toFixed(0) + " mm", C.strap], ["Moment M = W·L", (P.W * L).toFixed(1) + " N·m"],
                     ["Bite force N = M/h", N.toFixed(0) + " N", C.normal], ["Friction 2μN (μ = 0.30)", (2 * P.muWet * N).toFixed(0) + " N", C.fric],
-                    ["Weight W", "186 N", C.weight]]);
+                    ["Weight W", "211 N", C.weight]]);
   gauge(700, 360, 400, ratio, "Grip ÷ weight");
   status(700, 438, slipping);
   if (L > 0.165) text("locks at L = h / 2μ = 167 mm", 905, 468, 18, C.ok, 600, "left", clamp((t - 6) / 1));
   const cap = t < 6.5
     ? "Move the weight out on an arm. Now it tips the collar: pad and strap bite the bark h = 100 mm apart, with force N = W·L / h."
-    : "Grip is 2μN. Once the lever passes h / 2μ (167 mm on wet bark) the collar locks. Our robot's weight acts 267 mm out: 1.60× margin.";
+    : "Grip is 2μN. Once the lever passes h / 2μ (167 mm on wet bark) the collar locks. Our robot's weight acts 375 mm out: 2.25× on a vertical trunk.";
   caption(cap);
 });
 
@@ -286,15 +287,50 @@ add(15, (t) => {
   // moment bar
   readout(760, 40, [["Saw position", swing < 0.05 ? "parked over the arm" : swing > 0.95 ? "far side of trunk" : "swinging"],
                     ["Tipping moment M", M.toFixed(1) + " N·m", M > 0 ? C.ok : C.bad],
-                    ["Tensioner", tension > 0.5 ? "pulling 684 N" : "slack", tension > 0.5 ? C.strap : C.muted]]);
+                    ["Tensioner", tension > 0.5 ? "pulling 584 N" : "slack", tension > 0.5 ? C.strap : C.muted]]);
   gauge(760, 250, 340, ratio, "Upper collar grip ÷ weight (wet bark)");
   status(760, 330, ratio < 1);
   const cap = t < 2.5
-    ? "While climbing, the saw is parked over the arm side. Its weight adds to the tipping moment, so the collar bites harder: 1.60×."
+    ? "While climbing, the saw is parked over the arm side. Its weight adds to the tipping moment, so the collar bites harder: 2.25×."
     : t < 9
-      ? "Swing the saw to the far side and its weight tips the collar the wrong way. The moment goes negative and self-locking alone gives no grip at all."
-      : "So at the crown, before the arm swings out, a lead screw pulls the strap tight. That gives 1.64× grip without any tipping.";
+      ? "Swing the saw to the far side and its weight cancels most of the tipping moment. Grip falls to 0.33× and the collar would slide."
+      : "So at the crown, before the arm swings out, a lead screw pulls the strap tight. That brings the grip back to 2.00×.";
   caption(cap);
+});
+
+// 6b. a real 100 ft palm leans: why the arms had to get longer
+add(15, (t) => {
+  const useNew = t >= 7.5, tl = useNew ? t - 7.5 : t;
+  const D = useNew ? { W: P.W, Mstow: P.Mstow, Larm: P.Larm, zcg: P.zcg } : P.old;
+  const lean = 23 * ease((tl - 1.0) / 4.0), th = lean * Math.PI / 180;
+  const M = (D.Mstow + P.Wt * D.Larm) * Math.cos(th) - D.W * D.zcg * Math.sin(th);
+  const ratio = 2 * P.muWet * Math.max(0, M) / P.h / ((D.W + P.Wt) * Math.cos(th));
+  const s = 560, px = 360, py = 560, hw = P.R * s * 0.6;
+  // leaning trunk: rotate everything about its foot; the arm is on the side it leans toward
+  g.save(); g.translate(px, py); g.rotate(th); g.translate(-px, -py);
+  trunk(px, -200, 560, hw);
+  const yc = 250;
+  collar(px, yc, s, hw, D.Larm, 0.08, true);
+  const tip = [px + D.Larm * s, yc + 0.08 * D.Larm * s];
+  // robot body hanging below the collar, along the trunk
+  rrect(tip[0] - 11, tip[1] + 10, 22, 150, 5, "#7d8b99");
+  rrect(tip[0] - 26, tip[1] + 165, 52, 50, 6, "#3e4a52");
+  g.restore();
+  // CG of the hanging mass (world frame) and its weight arrow (always straight down)
+  const cgLocal = [D.Larm * 0.8 * s, D.zcg * s], c = Math.cos(th), sn = Math.sin(th);
+  const lx = px + cgLocal[0], ly = yc + cgLocal[1];
+  const wx = px + (lx - px) * c - (ly - py) * sn, wy = py + (lx - px) * sn + (ly - py) * c;
+  g.fillStyle = C.weight; g.beginPath(); g.arc(wx, wy, 8, 0, Math.PI * 2); g.fill();
+  arrow(wx, wy, wx, wy + 90, C.weight, 5); text("W", wx + 12, wy + 80, 22, C.weight, 700);
+  text(useNew ? "500 mm arms" : "350 mm arms (first design)", 60, 70, 26, useNew ? C.ok : C.strap, 700);
+  readout(760, 60, [["Tree", "100 ft, wet bark"], ["Trunk lean + sway", lean.toFixed(0) + "°", C.strap],
+                    ["Rope carried", "2.0 kg"], ["Tipping moment M", M.toFixed(1) + " N·m", C.normal]]);
+  gauge(760, 300, 340, ratio, "Grip ÷ weight");
+  status(760, 380, ratio < 1);
+  if (ratio < 1.5) text("below the 1.5 target", 965, 410, 18, C.bad, 600);
+  caption(useNew
+    ? "Longer arms fix it. At 500 mm both collars keep 1.65× or better on a wet 100 ft palm leaning 20° and swaying. Arms go on the side the trunk leans toward."
+    : "A real tall palm leans. The robot's weight hangs below the collar, so on a leaning trunk it swings back toward the trunk and takes lever away. 350 mm arms drop to 1.05×.");
 });
 
 // 7. summary
@@ -302,12 +338,13 @@ add(9, (t) => {
   text("Why the arm sticks out while climbing", 90, 130, 44, C.ink, 800, "left", clamp(t / 0.6));
   const items = [
     ["Grip.", "The arm puts the weight off-centre. That tips the collar so pad and strap bite: N = W·L / h."],
-    ["It scales.", "Heavier means a harder bite. On wet bark it locks once L passes 167 mm. Ours: 267 mm, 1.60×."],
+    ["It scales.", "Heavier means a harder bite. On wet bark it locks once L passes 167 mm. Ours: 375 mm, 2.25×."],
     ["It steps.", "Pushing up under an arm levels its collar so it slides. Hanging weight on it locks it."],
     ["Saw parked.", "The saw sits over the arm side while climbing. At the crown the tensioner clamps first."],
+    ["Long arms.", "A leaning 100 ft palm takes lever away. 500 mm arms keep 1.65× on wet bark."],
   ];
   items.forEach(([h, b], i) => {
-    const a = clamp((t - 0.8 - i * 0.6) / 0.6), y = 230 + i * 92;
+    const a = clamp((t - 0.8 - i * 0.6) / 0.6), y = 215 + i * 84;
     rrect(90, y - 38, 14, 54, 4, C.strap);
     text(h, 126, y, 28, C.strap, 700, "left", a);
     wrap(b, 330, y, 860, 24, C.ink, 500, 1.3, a);

@@ -25,17 +25,17 @@
 <g transform="rotate(6 390.0 250.0)">
 <rect class="pad" x="388.0" y="250.0" width="10" height="22.0" rx="2"/>
 <line class="strap" x1="270.0" y1="232.0" x2="396.0" y2="256.0"/>
-<rect class="m" x="396.0" y="246.0" width="80.0" height="8" rx="2"/>
+<rect class="m" x="396.0" y="246.0" width="140.0" height="8" rx="2"/>
 </g>
 <g transform="rotate(6 390.0 434.0)">
 <rect class="pad" x="388.0" y="434.0" width="10" height="22.0" rx="2"/>
 <line class="strap" x1="270.0" y1="416.0" x2="396.0" y2="440.0"/>
-<rect class="m" x="396.0" y="430.0" width="80.0" height="8" rx="2"/>
+<rect class="m" x="396.0" y="430.0" width="140.0" height="8" rx="2"/>
 </g>
-<rect class="cyl" x="467.0" y="256.0" width="18" height="101.2" rx="3"/>
-<rect class="m" x="472.0" y="357.2" width="8" height="72.8"/>
-<rect class="m" x="454.0" y="444.0" width="44" height="48" rx="3"/>
-<text class="t" x="454.0" y="506.0">battery 10 Ah (counterweight)</text>
+<rect class="cyl" x="527.0" y="256.0" width="18" height="101.2" rx="3"/>
+<rect class="m" x="532.0" y="357.2" width="8" height="72.8"/>
+<rect class="m" x="514.0" y="444.0" width="44" height="48" rx="3"/>
+<text class="t" x="514.0" y="506.0">battery 10 Ah (counterweight)</text>
 <rect class="m" x="244.0" y="220.0" width="22" height="16" rx="2"/>
 <text class="t" text-anchor="end" x="240.0" y="232.0">harvest tensioner</text>
 <rect class="m" x="404.0" y="130.0" width="9" height="116"/>
@@ -49,11 +49,11 @@
 <circle class="g" cx="164.0" cy="177.0" r="8"/>
 <circle class="g" cx="140.0" cy="181.0" r="8"/>
 <text class="t" text-anchor="end" x="141.8" y="80.8">Ø235 saw</text>
-<text class="t" x="492.0" y="242.0">upper collar</text>
-<text class="t" x="492.0" y="426.0">lower collar</text>
-<text class="t" x="492.0" y="346.0">EC-08 cylinder, 400 stroke</text>
-<line class="d" x1="330.0" y1="514.0" x2="476.0" y2="514.0"/>
-<text class="dt" x="334.0" y="526.0">lever L = 350 mm from trunk axis</text>
+<text class="t" x="552.0" y="242.0">upper collar</text>
+<text class="t" x="552.0" y="426.0">lower collar</text>
+<text class="t" x="552.0" y="346.0">EC-08 cylinder, 400 stroke</text>
+<line class="d" x1="330.0" y1="514.0" x2="536.0" y2="514.0"/>
+<text class="dt" x="334.0" y="526.0">lever L = 500 mm from trunk axis</text>
 <text class="dt" x="270.0" y="578.0">grip rule: lever L ≥ h / (2μ), so grip grows with load</text>
 <line class="c" x1="330.0" y1="60.0" x2="330.0" y2="560.0"/>
 <text class="t h" x="655.0" y="70.0">One climbing step (392 mm)</text>
