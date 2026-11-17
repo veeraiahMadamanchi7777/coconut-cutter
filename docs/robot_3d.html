@@ -1,0 +1,553 @@
+<title>Palm Inchworm Robot</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: workshop-bench viewer. Large 3D stage, a narrow instrument rail beside it, spec sheet below. */
+:root {
+  --bg: #f3f2ec;
+  --panel: #fbfaf6;
+  --ink: #1d2a24;
+  --muted: #5d6b63;
+  --line: #d9d8cf;
+  --strap: #c9771a;
+  --strap-soft: #f4e3c9;
+  --saw: #b8322a;
+  --ok: #2f7a4b;
+  --ok-soft: #dcefe2;
+  --free: #8a8f8c;
+  --free-soft: #e9e9e4;
+  --scene: #e8eae2;
+  --display: "Space Grotesk", "Segoe UI", system-ui, sans-serif;
+  --body: "Inter", "Segoe UI", system-ui, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #131815; --panel: #1a201c; --ink: #e6ece7; --muted: #9aa8a0; --line: #2c3630;
+    --strap: #e39a3e; --strap-soft: #3a2d1b; --saw: #e2574b; --ok: #6fcf93; --ok-soft: #1d3326;
+    --free: #a2a8a4; --free-soft: #262c28; --scene: #1c231f; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #131815; --panel: #1a201c; --ink: #e6ece7; --muted: #9aa8a0; --line: #2c3630;
+  --strap: #e39a3e; --strap-soft: #3a2d1b; --saw: #e2574b; --ok: #6fcf93; --ok-soft: #1d3326;
+  --free: #a2a8a4; --free-soft: #262c28; --scene: #1c231f; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--ink); font-family: var(--body); font-size: 15px; line-height: 1.55;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 20px 40px;
+}
+.wrap { max-width: 1180px; margin: 0 auto; display: grid; gap: 18px; }
+header { display: grid; gap: 4px; }
+.eyebrow { font-family: var(--mono); font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+h1 { font-family: var(--display); font-weight: 700; font-size: clamp(26px, 4vw, 38px); line-height: 1.1; margin: 0; text-wrap: balance; }
+header p { margin: 0; color: var(--muted); max-width: 68ch; }
+.bench { display: grid; grid-template-columns: minmax(0, 1fr) 280px; gap: 14px; align-items: stretch; }
+.stage { position: relative; min-width: 0; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: var(--scene); height: min(72vh, 640px); min-height: 420px; }
+#gl { display: block; width: 100%; height: 100%; touch-action: none; cursor: grab; }
+#gl:active { cursor: grabbing; }
+.labels { position: absolute; inset: 0; pointer-events: none; }
+.tag { position: absolute; transform: translate(10px, -50%); font-family: var(--mono); font-size: 11px; white-space: nowrap;
+  background: var(--panel); color: var(--ink); border: 1px solid var(--line); border-radius: 4px; padding: 2px 6px; }
+.tag::before { content: ""; position: absolute; left: -10px; top: 50%; width: 10px; border-top: 1px solid var(--muted); }
+.labels.off { display: none; }
+.hint { position: absolute; left: 12px; bottom: 10px; font-size: 12px; color: var(--muted); font-family: var(--mono); pointer-events: none; }
+.rail { display: grid; gap: 12px; align-content: start; min-width: 0; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px; display: grid; gap: 10px; }
+.phase-name { font-family: var(--display); font-weight: 700; font-size: 18px; line-height: 1.2; min-height: 2.4em; }
+.readout { display: grid; grid-template-columns: auto 1fr; gap: 6px 12px; align-items: center; font-size: 13px; }
+.readout dt { color: var(--muted); }
+.readout dd { margin: 0; justify-self: end; font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.chip { display: inline-block; font-family: var(--mono); font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; border-radius: 99px; padding: 2px 9px; }
+.chip.locked { background: var(--ok-soft); color: var(--ok); }
+.chip.free { background: var(--free-soft); color: var(--free); }
+.chip.on { background: var(--strap-soft); color: var(--strap); }
+.chip.saw { background: var(--saw); color: var(--panel); }
+.controls { display: flex; flex-wrap: wrap; gap: 8px; }
+button { font: 600 13px var(--body); color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: 7px; padding: 7px 12px; cursor: pointer; }
+button:hover { border-color: var(--muted); }
+button:focus-visible { outline: 2px solid var(--strap); outline-offset: 2px; }
+button[aria-pressed="true"] { background: var(--ink); color: var(--panel); border-color: var(--ink); }
+.timeline { display: grid; gap: 6px; }
+.track { position: relative; height: 8px; border-radius: 99px; background: var(--free-soft); overflow: hidden; }
+.fill { position: absolute; inset: 0 auto 0 0; width: 0; background: var(--strap); }
+.marks { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; }
+.marks button { padding: 5px 4px; font-size: 12px; }
+.specs { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.spec { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; display: grid; gap: 2px; min-width: 0; }
+.spec b { font-family: var(--display); font-size: 22px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.spec span { color: var(--muted); font-size: 13px; }
+.how { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.how .card p { margin: 0; color: var(--muted); }
+.how h2 { font-family: var(--display); font-size: 16px; margin: 0; }
+.legend { display: flex; flex-wrap: wrap; gap: 14px; font-size: 13px; color: var(--muted); }
+.legend i { display: inline-block; width: 12px; height: 12px; border-radius: 3px; vertical-align: -2px; margin-right: 6px; }
+@media (max-width: 860px) {
+  .bench { grid-template-columns: 1fr; }
+  .stage { height: 60vh; min-height: 360px; }
+  .specs { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .how { grid-template-columns: 1fr; }
+}
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="eyebrow">coconut-harvester · concept v2</div>
+    <h1>Inchworm palm-climbing robot</h1>
+    <p>Two strap collars grip harder the more weight they carry. One electric cylinder walks them up the trunk, one at a time. Drag to orbit, scroll or pinch to zoom.</p>
+  </header>
+
+  <div class="bench">
+    <div class="stage">
+      <canvas id="gl" aria-label="3D model of the robot climbing a coconut palm"></canvas>
+      <div class="labels" id="labels"></div>
+      <div class="hint">drag · orbit &nbsp; scroll · zoom</div>
+    </div>
+    <aside class="rail">
+      <div class="card" aria-live="polite">
+        <div class="eyebrow">Now</div>
+        <div class="phase-name" id="phase">Strapping onto the trunk</div>
+        <dl class="readout">
+          <dt>Upper collar</dt><dd><span class="chip locked" id="cU">locked</span></dd>
+          <dt>Lower collar</dt><dd><span class="chip locked" id="cL">locked</span></dd>
+          <dt>Harvest tensioner</dt><dd><span class="chip free" id="cT">slack</span></dd>
+          <dt>Saw</dt><dd><span class="chip free" id="cS">off</span></dd>
+          <dt>Height (lower collar)</dt><dd id="hgt">0.25 m</dd>
+          <dt>Steps taken</dt><dd id="steps">0</dd>
+        </dl>
+      </div>
+      <div class="card">
+        <div class="controls">
+          <button id="play" aria-pressed="true">Pause</button>
+          <button id="restart">Restart</button>
+          <button id="lbl" aria-pressed="true">Labels</button>
+        </div>
+        <div class="controls" role="group" aria-label="Playback speed">
+          <button data-speed="1">1×</button>
+          <button data-speed="3" aria-pressed="true">3×</button>
+          <button data-speed="8">8×</button>
+        </div>
+        <div class="timeline">
+          <div class="track"><div class="fill" id="fill"></div></div>
+          <div class="marks">
+            <button data-jump="mount">Mount</button>
+            <button data-jump="climb">Climb</button>
+            <button data-jump="harvest">Harvest</button>
+            <button data-jump="descend">Descend</button>
+          </div>
+        </div>
+      </div>
+      <div class="legend">
+        <span><i style="background:var(--strap)"></i>strap gripping</span>
+        <span><i style="background:var(--free)"></i>strap released</span>
+        <span><i style="background:var(--saw)"></i>saw</span>
+      </div>
+    </aside>
+  </div>
+
+  <section class="specs" aria-label="Key figures">
+    <div class="spec"><b>19.0 kg</b><span>one-person lift (v1 was 39.3 kg)</span></div>
+    <div class="spec"><b>392 mm</b><span>per step, 0.17 m/s average</span></div>
+    <div class="spec"><b>Wet bark</b><span>holds at 1.5× margin, μ = 0.30</span></div>
+    <div class="spec"><b>7 robots</b><span>for 17,500 palms (v1 needed 17)</span></div>
+  </section>
+
+  <section class="how">
+    <div class="card">
+      <h2>Why the collar grips</h2>
+      <p>A rubber V-pad sits on one side of the trunk and a steel-cored strap wraps the other. The cantilever arm (350 mm from the trunk axis) tips the collar, so pad and strap bite 100 mm apart. The bite force is the load's moment divided by that gap, so a heavier load grips harder. It holds whenever the lever is at least h / 2μ.</p>
+    </div>
+    <div class="card">
+      <h2>Why there is a tensioner</h2>
+      <p>With the saw swung to the far side of the trunk, its weight cancels most of the tipping moment and the collar would loosen. Before the arm moves out, a self-locking lead screw pulls the upper strap tight (1,000 N rating). It lets go only after the arm is stowed again. Watch the harvest phase: the bunch is on the far side.</p>
+    </div>
+  </section>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script>
+(() => {
+  // ---- dimensions from the sized design (metres) -------------------------
+  const D = { lever: 0.35, pad: 0.10, stroke: 0.40, step: 0.392, reach: 0.70, blade: 0.235,
+              tree: 8.2, r0: 0.155, r1: 0.128, S0: 0.56, startY: 0.25 };
+  const trunkR = y => D.r0 + (D.r1 - D.r0) * Math.min(1, Math.max(0, y / D.tree));
+  const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  // ---- renderer / scene ------------------------------------------------------
+  const canvas = document.getElementById("gl");
+  const stage = canvas.parentElement;
+  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+  renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
+  renderer.outputEncoding = THREE.sRGBEncoding;
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  const scene = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(38, 1, 0.05, 80);
+  camera.position.set(2.2, 1.6, 2.6);
+  const controls = new THREE.OrbitControls(camera, canvas);
+  controls.enableDamping = true; controls.minDistance = 0.8; controls.maxDistance = 14;
+  controls.target.set(0, 1.0, 0);
+
+  function cssVar(n) { return getComputedStyle(document.documentElement).getPropertyValue(n).trim(); }
+  function applyTheme() {
+    const c = new THREE.Color(cssVar("--scene"));
+    scene.background = c;
+    scene.fog = new THREE.Fog(c, 9, 26);
+    strapLocked.color.set(cssVar("--strap"));
+    strapFree.color.set(cssVar("--free"));
+  }
+
+  scene.add(new THREE.HemisphereLight(0xf2f5ff, 0x6b5a3e, 0.75));
+  const sun = new THREE.DirectionalLight(0xffffff, 0.9);
+  sun.position.set(4, 9, 5); sun.castShadow = true;
+  sun.shadow.mapSize.set(2048, 2048);
+  Object.assign(sun.shadow.camera, { left: -3, right: 3, top: 3, bottom: -3, near: 1, far: 30 });
+  scene.add(sun); scene.add(sun.target);
+
+  // ---- materials --------------------------------------------------------------
+  const M = (color, extra = {}) => new THREE.MeshStandardMaterial(Object.assign({ color, roughness: 0.6, metalness: 0.1 }, extra));
+  const alu = M(0xc5ccd2, { metalness: 0.55, roughness: 0.35 });
+  const dark = M(0x2f3a42, { roughness: 0.5 });
+  const rubber = M(0x222826, { roughness: 0.9 });
+  const cylMat = M(0x7d8b99, { metalness: 0.6, roughness: 0.3 });
+  const rodMat = M(0xe8ecef, { metalness: 0.9, roughness: 0.15 });
+  const strapLocked = M(0xc9771a, { roughness: 0.7 });
+  const strapFree = M(0x8a8f8c, { roughness: 0.8 });
+  const sawMat = M(0xb8322a, { metalness: 0.4, roughness: 0.35 });
+  const guardMat = M(0x5b6670, { metalness: 0.3, side: THREE.DoubleSide });
+  const nutMat = M(0x8fa83a, { roughness: 0.55 });
+  const nutMat2 = M(0xa6a63b, { roughness: 0.55 });
+  const stalkMat = M(0xb59a52, { roughness: 0.8 });
+  const frondMat = M(0x4f8a3a, { roughness: 0.7, side: THREE.DoubleSide });
+  const tensionMat = M(0x5b6670, { emissive: 0x000000 });
+
+  // ---- ground + palm ----------------------------------------------------------
+  const ground = new THREE.Mesh(new THREE.CircleGeometry(14, 64), M(0x9a8f6b, { roughness: 1 }));
+  ground.rotation.x = -Math.PI / 2; ground.receiveShadow = true; scene.add(ground);
+
+  function barkTexture() {
+    const c = document.createElement("canvas"); c.width = 256; c.height = 1024;
+    const g = c.getContext("2d");
+    g.fillStyle = "#9c8463"; g.fillRect(0, 0, 256, 1024);
+    for (let y = 0; y < 1024; y += 18 + Math.random() * 10) {
+      g.fillStyle = `rgba(70,52,32,${0.35 + Math.random() * 0.3})`; g.fillRect(0, y, 256, 3 + Math.random() * 3);
+      g.fillStyle = "rgba(220,200,165,0.18)"; g.fillRect(0, y + 5, 256, 2);
+    }
+    for (let i = 0; i < 900; i++) { g.fillStyle = `rgba(40,30,20,${Math.random() * 0.15})`; g.fillRect(Math.random() * 256, Math.random() * 1024, 2, 6); }
+    const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(2, 6); t.encoding = THREE.sRGBEncoding;
+    return t;
+  }
+  const trunk = new THREE.Mesh(new THREE.CylinderGeometry(D.r1, D.r0 * 1.15, D.tree + 0.6, 40, 1),
+                               new THREE.MeshStandardMaterial({ map: barkTexture(), roughness: 0.95 }));
+  trunk.position.y = (D.tree + 0.6) / 2; trunk.castShadow = trunk.receiveShadow = true; scene.add(trunk);
+
+  const crownY = D.tree + 0.55;
+  for (let i = 0; i < 16; i++) {
+    const a = (i / 16) * Math.PI * 2 + (i % 2) * 0.2, lift = 0.6 + (i % 3) * 0.35, len = 2.6 + (i % 4) * 0.4;
+    const dir = new THREE.Vector3(Math.cos(a), 0, Math.sin(a));
+    const p0 = new THREE.Vector3(0, crownY, 0);
+    const p1 = p0.clone().addScaledVector(dir, len * 0.45).add(new THREE.Vector3(0, lift, 0));
+    const p2 = p0.clone().addScaledVector(dir, len).add(new THREE.Vector3(0, lift - 1.3, 0));
+    const curve = new THREE.QuadraticBezierCurve3(p0, p1, p2);
+    scene.add(new THREE.Mesh(new THREE.TubeGeometry(curve, 24, 0.018, 5), frondMat));
+    // leaflets: thin quads along the rachis
+    const pos = [];
+    for (let k = 2; k < 24; k++) {
+      const t = k / 24, p = curve.getPoint(t), tan = curve.getTangent(t);
+      const side = new THREE.Vector3().crossVectors(tan, new THREE.Vector3(0, 1, 0)).normalize();
+      const w = 0.55 * Math.sin(Math.PI * t) + 0.1, droop = new THREE.Vector3(0, -0.18 * w, 0);
+      for (const s of [-1, 1]) {
+        const tip = p.clone().addScaledVector(side, s * w).add(droop);
+        const q = p.clone().addScaledVector(tan, 0.07);
+        pos.push(p.x, p.y, p.z, tip.x, tip.y, tip.z, q.x, q.y, q.z);
+      }
+    }
+    const g = new THREE.BufferGeometry(); g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3)); g.computeVertexNormals();
+    const leaf = new THREE.Mesh(g, frondMat); leaf.castShadow = true; scene.add(leaf);
+  }
+
+  function bunch(angle, center, nuts, mat) {
+    const grp = new THREE.Group();
+    const stalkTop = new THREE.Vector3(Math.cos(angle) * D.r1, crownY - 0.1, Math.sin(angle) * D.r1);
+    const stalk = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.022, 1, 8), stalkMat);
+    const pend = new THREE.Group();
+    for (let k = 0; k < nuts; k++) {
+      const a = k * 2.399, r = 0.05 + 0.03 * (k % 3), y = -0.05 * Math.floor(k / 3);
+      const n = new THREE.Mesh(new THREE.SphereGeometry(0.085, 18, 14), mat);
+      n.scale.set(1, 1.15, 1); n.position.set(Math.cos(a) * r * 2.2, y, Math.sin(a) * r * 2.2); n.castShadow = true; pend.add(n);
+    }
+    pend.position.copy(center); grp.add(pend); grp.add(stalk);
+    const place = () => {
+      const top = pend.position.clone().add(new THREE.Vector3(0, 0.12, 0));
+      const mid = stalkTop.clone().add(top).multiplyScalar(0.5);
+      stalk.position.copy(mid); stalk.scale.set(1, stalkTop.distanceTo(top), 1);
+      stalk.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), top.clone().sub(stalkTop).normalize());
+    };
+    place(); scene.add(grp);
+    return { grp, pend, stalk, place, home: center.clone() };
+  }
+  // two decorative bunches, the target is created after the robot (it must line up with the saw)
+  [[0.9, 7], [2.6, 8]].forEach(([a, n]) =>
+    bunch(a, new THREE.Vector3(Math.cos(a) * 0.5, crownY - 0.55, Math.sin(a) * 0.5), n, nutMat2));
+
+  // ---- robot ------------------------------------------------------------------
+  function box(w, h, d, mat) { const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat); m.castShadow = true; return m; }
+  function collar() {
+    const g = new THREE.Group();
+    const pad = box(0.035, D.pad + 0.02, 0.10, rubber); g.add(pad);
+    const padBack = box(0.02, D.pad + 0.04, 0.12, dark); g.add(padBack);
+    const strap = new THREE.Mesh(new THREE.TorusGeometry(1, 0.012, 8, 48, Math.PI * 1.55), strapLocked);
+    strap.rotation.x = Math.PI / 2; strap.castShadow = true; g.add(strap);
+    const armL = box(1, 0.03, 0.03, alu), armR = box(1, 0.03, 0.03, alu); g.add(armL, armR);
+    const tip = box(0.06, 0.07, 0.14, alu); g.add(tip);
+    const reel = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.04, 16), dark); reel.rotation.z = Math.PI / 2; g.add(reel);
+    const servo = box(0.04, 0.035, 0.05, dark); g.add(servo);
+    scene.add(g);
+    return {
+      g, strap, set(y, locked) {
+        const r = trunkR(y);
+        g.position.set(0, y, 0);
+        pad.position.set(r + 0.017, 0, 0); padBack.position.set(r + 0.045, 0, 0);
+        const sr = r + 0.012;
+        strap.scale.set(sr, sr, locked ? 1 : 1.6);
+        strap.rotation.set(Math.PI / 2, locked ? 0.09 : 0, Math.PI * 0.225);
+        strap.position.set(0, locked ? 0.05 : 0.0, 0);
+        strap.material = locked ? strapLocked : strapFree;
+        const x0 = r + 0.055, x1 = D.lever, L = x1 - x0;
+        for (const [arm, z] of [[armL, 0.05], [armR, -0.05]]) { arm.scale.set(L, 1, 1); arm.position.set(x0 + L / 2, 0, z); }
+        tip.position.set(x1, 0, 0);
+        reel.position.set(r + 0.07, 0.06, 0.09); servo.position.set(r + 0.07, 0.06, -0.09);
+      }
+    };
+  }
+  const upper = collar(), lower = collar();
+
+  // cylinder body hangs from the upper tip; rod rises from the lower tip
+  const body = new THREE.Mesh(new THREE.CylinderGeometry(0.032, 0.032, 0.44, 20), cylMat); body.castShadow = true; scene.add(body);
+  const motor = new THREE.Mesh(new THREE.CylinderGeometry(0.036, 0.036, 0.09, 20), dark); scene.add(motor);
+  const rod = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 1, 12), rodMat); rod.castShadow = true; scene.add(rod);
+  const battery = box(0.11, 0.17, 0.12, M(0x3d4a52)); scene.add(battery);
+  const battStripe = box(0.112, 0.02, 0.122, M(0xc9771a)); scene.add(battStripe);
+  const tensioner = box(0.05, 0.05, 0.09, tensionMat); scene.add(tensioner);
+
+  // slewing harvest arm on top of the upper collar
+  const slew = new THREE.Mesh(new THREE.TorusGeometry(1, 0.016, 8, 48), alu); slew.rotation.x = Math.PI / 2; scene.add(slew);
+  const carriage = box(0.07, 0.05, 0.07, dark); scene.add(carriage);
+  const BOOM = 0.72;
+  const boom = new THREE.Mesh(new THREE.CylinderGeometry(0.016, 0.016, BOOM, 10), alu); boom.castShadow = true; scene.add(boom);
+  const sawGrp = new THREE.Group(); scene.add(sawGrp);
+  const blade = new THREE.Mesh(new THREE.CylinderGeometry(D.blade / 2, D.blade / 2, 0.004, 40), sawMat); blade.castShadow = true;
+  for (let k = 0; k < 24; k++) { const t = box(0.016, 0.006, 0.01, sawMat); const a = k / 24 * Math.PI * 2;
+    t.position.set(Math.cos(a) * D.blade / 2, 0, Math.sin(a) * D.blade / 2); t.rotation.y = -a; blade.add(t); }
+  const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 0.012, 16), dark); blade.add(hub);
+  const guard = new THREE.Mesh(new THREE.CylinderGeometry(D.blade / 2 + 0.012, D.blade / 2 + 0.012, 0.03, 32, 1, true, 0, Math.PI), guardMat);
+  const sawMotor = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.08, 16), dark); sawMotor.position.y = 0.045;
+  sawGrp.add(blade, guard, sawMotor);
+
+  // belay tether to a ground anchor
+  const tetherGeom = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3()]);
+  const tether = new THREE.Line(tetherGeom, new THREE.LineBasicMaterial({ color: 0xd9b021 })); scene.add(tether);
+  const anchor = box(0.08, 0.06, 0.08, dark); anchor.position.set(1.2, 0.03, -0.9); scene.add(anchor);
+
+  // ---- arm kinematics ----------------------------------------------------------
+  const STOW = 0.25;                         // stowed slew angle (rad), over the cantilever side
+  function armPose(yU, slewA, pitch) {
+    const ringY = yU + 0.12, rr = trunkR(ringY) + 0.045;
+    const c = new THREE.Vector3(Math.cos(slewA) * rr, ringY + 0.03, Math.sin(slewA) * rr);
+    const phi = pitch * 0.74;              // 0 = boom vertical (stowed), 0.74 rad ≈ 42° outwards
+    const dir = new THREE.Vector3(Math.cos(slewA) * Math.sin(phi), Math.cos(phi), Math.sin(slewA) * Math.sin(phi));
+    const end = c.clone().addScaledVector(dir, BOOM);
+    return { ringY, rr, c, dir, end };
+  }
+
+  // target bunch on the far side, placed where the deployed saw will meet its stalk
+  const TARGET_A = Math.PI + 0.35;
+  const yTopU = (() => { let yl = D.startY, n = 0; while (yl + D.S0 + D.step + D.step <= D.tree - 0.25) { yl += D.step; n++; } return yl + D.S0; })();
+  const sawAtCut = armPose(yTopU, TARGET_A, 1).end;
+  const target = bunch(TARGET_A, sawAtCut.clone().add(new THREE.Vector3(Math.cos(TARGET_A) * 0.06, -0.3, Math.sin(TARGET_A) * 0.06)), 9, nutMat);
+
+  // ---- mission timeline ------------------------------------------------------
+  // State: yl, act (cylinder extension), lockU, lockL, straps (0..1), tension (0..1),
+  // slew, pitch, saw, fall (0..1). Durations in real seconds from the sized design.
+  const T_TR = 0.25, T_UP_HEAVY = D.step / 0.30, T_UP_LIGHT = D.step / 0.60, T_DOWN = D.step / 0.48;
+  const segs = [];
+  let st = { yl: D.startY, act: 0, lockU: true, lockL: true, straps: 0, tension: 0, slew: STOW, pitch: 0, saw: false, fall: 0, steps: 0 };
+  function add(group, label, dur, change, flags = {}) {
+    const from = Object.assign({}, st), to = Object.assign({}, st, change, flags);
+    segs.push({ group, label, dur, from, to, flags }); st = to;
+  }
+  add("mount", "Strapping onto the trunk", 1.6, { straps: 1 });
+  add("mount", "Both collars locked, ready to climb", 0.8, {});
+  while (st.yl + D.S0 + D.step + D.step <= D.tree - 0.25) {
+    add("climb", "1 · Release upper collar", T_TR, {}, { lockU: false });
+    add("climb", "2 · Extend: upper collar rises", T_UP_HEAVY, { act: D.step });
+    add("climb", "3 · Lock upper collar", T_TR, {}, { lockU: true });
+    add("climb", "4 · Release lower collar", T_TR, {}, { lockL: false });
+    add("climb", "5 · Retract: lower collar rises", T_UP_LIGHT, { act: 0, yl: st.yl + D.step });
+    add("climb", "6 · Lock lower collar", T_TR, {}, { lockL: true, steps: st.steps + 1 });
+  }
+  add("harvest", "At the crown. Tensioner pulls the upper strap tight", 1.0, { tension: 1 });
+  add("harvest", "Arm slews to the far side (bunch behind the trunk)", 2.4, { slew: TARGET_A, pitch: 1 });
+  add("harvest", "Saw spins up. Drop zone confirmed clear", 0.8, {}, { saw: true });
+  add("harvest", "Cutting the bunch stalk (75 mm in under 10 s)", 2.6, {}, { saw: true });
+  add("harvest", "Bunch falls to the ground", 1.5, { fall: 1 }, { saw: false });
+  add("harvest", "Arm stows over the cantilever", 2.0, { slew: STOW, pitch: 0 });
+  add("harvest", "Tensioner slackens. Ready to descend", 0.7, { tension: 0 });
+  while (st.yl - D.step >= D.startY - 1e-6) {
+    add("descend", "1 · Release lower collar", T_TR, {}, { lockL: false });
+    add("descend", "2 · Extend: lower collar lowers", T_DOWN, { act: D.step, yl: st.yl - D.step });
+    add("descend", "3 · Lock lower collar", T_TR, {}, { lockL: true });
+    add("descend", "4 · Release upper collar", T_TR, {}, { lockU: false });
+    add("descend", "5 · Retract: upper collar lowers", T_DOWN, { act: 0 });
+    add("descend", "6 · Lock upper collar", T_TR, {}, { lockU: true, steps: st.steps + 1 });
+  }
+  add("descend", "Back on the ground. Unbuckle and carry to the next palm", 1.4, { straps: 0 });
+  add("descend", "Next palm", 1.0, {});
+  let acc = 0; segs.forEach(s => { s.t0 = acc; acc += s.dur; }); const TOTAL = acc;
+  const firstOf = g => segs.find(s => s.group === g).t0;
+
+  const ease = t => t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+  function stateAt(time) {
+    const s = segs.find(x => time < x.t0 + x.dur) || segs[segs.length - 1];
+    const u = ease(Math.min(1, Math.max(0, (time - s.t0) / s.dur)));
+    const o = {};
+    for (const k of ["yl", "act", "straps", "tension", "slew", "pitch"]) o[k] = s.from[k] + (s.to[k] - s.from[k]) * u;
+    o.fall = s.from.fall + (s.to.fall - s.from.fall) * (s.to.fall !== s.from.fall ? (time - s.t0) / s.dur : 1);
+    o.lockU = s.to.lockU; o.lockL = s.to.lockL; o.saw = !!s.flags.saw; o.steps = s.from.steps;
+    o.label = s.label; o.group = s.group;
+    return o;
+  }
+
+  // ---- labels -----------------------------------------------------------------
+  const labelsEl = document.getElementById("labels");
+  const labelDefs = [["upper", "upper collar"], ["lower", "lower collar"], ["cyl", "electric cylinder · 400 mm"],
+                     ["batt", "battery 10 Ah (counterweight)"], ["saw", "Ø235 saw · 150 W"], ["ten", "harvest tensioner"],
+                     ["tether", "belay tether"]];
+  const tags = {};
+  labelDefs.forEach(([k, txt]) => { const el = document.createElement("div"); el.className = "tag"; el.textContent = txt; labelsEl.appendChild(el); tags[k] = el; });
+  const anchors = {};
+  function placeLabel(k, v3) {
+    const p = v3.clone().project(camera), el = tags[k];
+    const w = stage.clientWidth, h = stage.clientHeight;
+    const vis = p.z < 1 && Math.abs(p.x) < 1.05 && Math.abs(p.y) < 1.05;
+    el.style.display = vis ? "" : "none";
+    el.style.left = ((p.x + 1) / 2 * w) + "px"; el.style.top = ((1 - p.y) / 2 * h) + "px";
+  }
+
+  // ---- pose -------------------------------------------------------------------
+  const ui = { phase: document.getElementById("phase"), cU: document.getElementById("cU"), cL: document.getElementById("cL"),
+               cT: document.getElementById("cT"), cS: document.getElementById("cS"), hgt: document.getElementById("hgt"),
+               steps: document.getElementById("steps"), fill: document.getElementById("fill") };
+  function chip(el, cls, txt) { if (el.textContent !== txt) { el.className = "chip " + cls; el.textContent = txt; } }
+  let bladeSpin = 0, lastLabel = "";
+
+  function pose(s, dt) {
+    const yl = s.yl, yu = yl + D.S0 + s.act;
+    const strapped = s.straps > 0.5;
+    upper.set(yu, s.lockU && strapped); lower.set(yl, s.lockL && strapped);
+    upper.strap.visible = lower.strap.visible = s.straps > 0.02;
+    // cylinder: body hangs from upper tip, rod from lower tip into the body
+    const x = D.lever + 0.0, bodyTop = yu - 0.04, bodyBot = bodyTop - 0.44;
+    body.position.set(x, (bodyTop + bodyBot) / 2, 0); motor.position.set(x, bodyTop - 0.02, 0.07);
+    motor.rotation.x = Math.PI / 2;
+    const rodTop = bodyBot + 0.02, rodBot = yl + 0.04;
+    rod.position.set(x, (rodTop + rodBot) / 2, 0); rod.scale.set(1, Math.max(0.01, rodTop - rodBot), 1);
+    battery.position.set(x, yl - 0.13, 0); battStripe.position.set(x, yl - 0.09, 0);
+    // tensioner on the upper strap, far side
+    const r = trunkR(yu);
+    tensioner.position.set(-r - 0.04, yu + 0.04, 0);
+    tensionMat.emissive.set(s.tension > 0.5 ? cssVar("--strap") : "#000000");
+    tensionMat.emissiveIntensity = 0.6 * s.tension;
+    // arm
+    const a = armPose(yu, s.slew, s.pitch);
+    slew.position.set(0, a.ringY, 0); slew.scale.set(a.rr, a.rr, 1);
+    carriage.position.copy(a.c); carriage.rotation.y = -s.slew;
+    boom.position.copy(a.c).addScaledVector(a.dir, BOOM / 2);
+    boom.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), a.dir);
+    sawGrp.position.copy(a.end);
+    const radial = new THREE.Vector3(Math.cos(s.slew), 0, Math.sin(s.slew));
+    sawGrp.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), new THREE.Vector3(-radial.z, 0, radial.x));
+    if (s.saw) bladeSpin += dt * 60; blade.rotation.y = bladeSpin;
+    // target bunch
+    if (s.fall > 0 && s.group === "harvest") {
+      const f = Math.min(1, s.fall), drop = (target.home.y - 0.12) * f * f;
+      target.pend.position.set(target.home.x * (1 + 0.3 * f), target.home.y - drop, target.home.z * (1 + 0.3 * f));
+      target.pend.rotation.z = f * 0.6; target.stalk.visible = false;
+    } else if (s.group === "mount" || (s.group === "climb") || (s.group === "harvest" && s.fall === 0)) {
+      target.pend.position.copy(target.home); target.pend.rotation.z = 0; target.stalk.visible = true; target.place();
+    }
+    // tether
+    const tp = tetherGeom.attributes.position;
+    tp.setXYZ(0, x, yu + 0.05, 0.05); tp.setXYZ(1, anchor.position.x, 0.06, anchor.position.z); tp.needsUpdate = true;
+    // sun follows for crisp shadows
+    sun.position.set(4, yu + 6, 5); sun.target.position.set(0, yu - 0.3, 0);
+    // labels
+    placeLabel("upper", new THREE.Vector3(D.lever + 0.04, yu + 0.02, 0.08));
+    placeLabel("lower", new THREE.Vector3(D.lever + 0.04, yl + 0.02, 0.08));
+    placeLabel("cyl", new THREE.Vector3(x + 0.04, (bodyTop + bodyBot) / 2, 0));
+    placeLabel("batt", new THREE.Vector3(x + 0.06, yl - 0.15, 0));
+    placeLabel("saw", a.end.clone().add(new THREE.Vector3(0, 0.12, 0)));
+    placeLabel("ten", new THREE.Vector3(-r - 0.07, yu + 0.06, 0));
+    placeLabel("tether", new THREE.Vector3(x * 0.6 + anchor.position.x * 0.4, (yu + 0.05) * 0.6, 0.05 + anchor.position.z * 0.4));
+    // readouts
+    if (s.label !== lastLabel) { ui.phase.textContent = s.label; lastLabel = s.label; }
+    chip(ui.cU, (s.lockU && strapped) ? "locked" : "free", !strapped ? "open" : s.lockU ? "locked" : "released");
+    chip(ui.cL, (s.lockL && strapped) ? "locked" : "free", !strapped ? "open" : s.lockL ? "locked" : "released");
+    chip(ui.cT, s.tension > 0.5 ? "on" : "free", s.tension > 0.5 ? "tight" : "slack");
+    chip(ui.cS, s.saw ? "saw" : "free", s.saw ? "cutting" : "off");
+    ui.hgt.textContent = yl.toFixed(2) + " m";
+    ui.steps.textContent = String(s.steps);
+    return (yl + yu) / 2;
+  }
+
+  // ---- loop -------------------------------------------------------------------
+  let t = 0, speed = 3, playing = !reduceMotion, prev = performance.now(), followY = 1.0;
+  function resize() {
+    const w = stage.clientWidth, h = stage.clientHeight;
+    renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix();
+  }
+  new ResizeObserver(resize).observe(stage);
+  function frame(now) {
+    const dt = Math.min(0.05, (now - prev) / 1000); prev = now;
+    if (playing) { t += dt * speed; if (t >= TOTAL) t = 0; }
+    const s = stateAt(t);
+    const mid = pose(s, playing ? dt * speed : 0);
+    const want = s.group === "harvest" ? mid + 0.35 : mid;
+    const dy = (want - followY) * Math.min(1, dt * 2.5);
+    followY += dy; controls.target.y += dy; camera.position.y += dy;
+    controls.update();
+    ui.fill.style.width = (t / TOTAL * 100).toFixed(2) + "%";
+    renderer.render(scene, camera);
+    requestAnimationFrame(frame);
+  }
+
+  // ---- controls ----------------------------------------------------------------
+  const playBtn = document.getElementById("play");
+  function setPlaying(p) { playing = p; playBtn.textContent = p ? "Pause" : "Play"; playBtn.setAttribute("aria-pressed", String(p)); }
+  playBtn.addEventListener("click", () => setPlaying(!playing));
+  document.getElementById("restart").addEventListener("click", () => { t = 0; setPlaying(true); });
+  const lblBtn = document.getElementById("lbl");
+  lblBtn.addEventListener("click", () => { const on = labelsEl.classList.toggle("off"); lblBtn.setAttribute("aria-pressed", String(!on)); });
+  document.querySelectorAll("[data-speed]").forEach(b => b.addEventListener("click", () => {
+    speed = +b.dataset.speed;
+    document.querySelectorAll("[data-speed]").forEach(x => x.setAttribute("aria-pressed", String(x === b)));
+  }));
+  document.querySelectorAll("[data-jump]").forEach(b => b.addEventListener("click", () => {
+    const g = b.dataset.jump;
+    t = g === "harvest" ? firstOf("harvest") : g === "descend" ? firstOf("descend") : g === "climb" ? firstOf("climb") : 0;
+    if (g === "harvest" || g === "descend") { followY = stateAt(t).yl + 0.6; controls.target.y = followY; camera.position.y = followY + 0.6; }
+  }));
+  setPlaying(playing);
+
+  applyTheme();
+  window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", applyTheme);
+  new MutationObserver(applyTheme).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+  resize();
+  requestAnimationFrame(frame);
+})();
+</script>

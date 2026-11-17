@@ -9,6 +9,8 @@ The repo holds two concepts, compared head to head in the same models:
   collars grip harder the more load they carry, and one electric cylinder walks them up the trunk.
 - **v1: wheel ring.** Six driven wheels are clamped onto the trunk and climb on friction.
 
+**Interactive 3D model:** [`docs/robot_3d.html`](docs/robot_3d.html) (open in a browser).
+
 **Full report:** [`docs/DESIGN.md`](docs/DESIGN.md), generated from the models: drawings, checks,
 comparison, sensitivity and safety.
 
