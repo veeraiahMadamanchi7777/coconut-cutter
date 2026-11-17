@@ -1,6 +1,7 @@
 import pytest
 
-from coconut_cutter.design import optimize
+from coconut_harvester.design import optimize
+from coconut_harvester.fleet import Plantation, fleet_needed
 
 
 @pytest.fixture(scope="session")
@@ -11,6 +12,10 @@ def design():
 
 
 @pytest.fixture(scope="session")
-def capacity(design):
-    from coconut_cutter.line_sim import stations_needed
-    return stations_needed(design, design.req.target_rate_per_h, design.req.hours_per_day, replications=20)
+def plantation():
+    return Plantation()
+
+
+@pytest.fixture(scope="session")
+def fleet(design, plantation):
+    return fleet_needed(design, plantation)

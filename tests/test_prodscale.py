@@ -1,42 +1,46 @@
-"""Production-scale soak tests.
+"""Production-scale soak.
 
-Default run: one production week (~300k nuts) and a 1M-nut force Monte Carlo.
-Full-year soak (~10M nuts): ``pytest -m prodscale``.
+Default: the 100 ha reference estate over 10 fresh weather years.
+``pytest -m prodscale``: a 1,000 ha estate (175,000 palms) and 20,000 closed-loop missions.
 """
+import math
 import random
-import time
 
 import pytest
 
-from coconut_cutter.line_sim import simulate_line
+from coconut_harvester.fleet import Plantation, simulate_year
+from coconut_harvester.robot_sim import run_mission
 
 
-def test_one_production_week(design, capacity):
-    n = capacity.stations
-    days = 6
-    r = simulate_line(design, n, days * design.req.hours_per_day, seed=2026)
-    assert r.nuts >= design.req.target_rate_per_h * design.req.hours_per_day * days
-    assert r.stalls == 0
-    swaps = sum(s.swaps for s in r.per_station)
-    assert swaps >= r.nuts // design.req.blade_resharpen_cuts - n  # crowns are being changed
+def _missions(design, n, seed):
+    rng = random.Random(seed)
+    for _ in range(n):
+        t = design.pop.sample(rng)
+        r = run_mission(design, t, design.pop.bunches(rng, 45), rng=rng)
+        assert r.ok, (t, r)
 
 
-def test_one_million_nuts_force_envelope(design):
-    rng = random.Random(1_000_000)
-    worst = max(design.required_force(design.pop.sample(rng), design.req.blade_dull_at_swap)
-                for _ in range(1_000_000))
-    assert worst * design.req.force_sf <= design.force_available
+def test_reference_estate_out_of_sample_years(design, fleet, plantation):
+    """Fresh weather years the sizing never saw: the service level still holds."""
+    years = [simulate_year(design, fleet.robots, plantation, seed=1000 + s) for s in range(10)]
+    passed = sum(fleet.service.year_ok(y) for y in years)
+    assert passed >= 8  # 90 % target; allow sampling noise on 10 fresh years
+    for y in years:
+        assert y.max_late <= fleet.service.hard_max_late
+        assert y.harvests >= plantation.palms * (365 / plantation.cycle_days - 1.5)
 
 
 @pytest.mark.prodscale
-def test_full_year_soak(design, capacity):
-    n = capacity.stations
-    t0 = time.perf_counter()
-    hours = design.req.days_per_year * design.req.hours_per_day
-    r = simulate_line(design, n, hours, seed=7)
-    annual_target = design.req.target_rate_per_h * hours
-    print(f"\nyear: {r.nuts:,} nuts on {n} stations in {time.perf_counter() - t0:.0f}s, "
-          f"availability {r.availability:.3f}, jams {r.jams}, breakdowns "
-          f"{sum(s.breakdowns for s in r.per_station)}")
-    assert r.nuts >= annual_target
-    assert r.stalls == 0
+def test_1000_hectare_estate(design, fleet):
+    big = Plantation(hectares=1000)
+    robots = fleet.robots * 10
+    y = simulate_year(design, robots, big, seed=7)
+    print(f"\n1000 ha: {robots} robots, {y.harvests:,} harvests, {y.bunches:,} bunches, "
+          f"P95 late {y.p95_late:.1f} d, max {y.max_late:.0f} d")
+    assert y.harvests >= big.palms * (365 / big.cycle_days - 1.5)
+    assert y.max_late <= fleet.service.hard_max_late
+
+
+@pytest.mark.prodscale
+def test_20000_closed_loop_missions(design):
+    _missions(design, 20_000, seed=77)

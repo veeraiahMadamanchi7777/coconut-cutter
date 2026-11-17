@@ -1,230 +1,303 @@
-"""Safety & function tests for the station controller."""
-import random
+"""Safety & function tests of the supervisory controller (no physics)."""
 from dataclasses import replace
 
 from hypothesis import given, settings, strategies as st
 
-from coconut_cutter.coconut import Coconut
-from coconut_cutter.controller import Config, Controller, Inputs, Outputs, State
+from coconut_harvester.controller import Cmd, Config, Controller, Inputs, Outputs, State
 
-DT = 0.01
-OK = Inputs(nut_present=True)
-
-
-def run(c: Controller, i: Inputs, seconds: float) -> Outputs:
-    out = Outputs()
-    for _ in range(max(1, round(seconds / DT))):
-        out = c.step(i, DT)
-    return out
+DT = 0.05
+CFG = Config(N0=500.0)
+GRIP = 500.0
+AIR = Inputs(clamp_force=GRIP, altitude=10.0, landed=False, battery_wh=200.0)
 
 
-# ---------------------------------------------------------------- functional
-
-def test_normal_cycle():
-    c = Controller()
-    out = c.step(replace(OK, start=True), DT)
-    assert c.state == State.EXTENDING and out.extend and not out.retract
-    out = c.step(replace(OK, start=True, at_home=False), DT)
-    assert out.extend
-    c.step(replace(OK, at_home=False, at_depth=True), DT)
-    assert c.state == State.DWELL
-    out = run(c, replace(OK, at_home=False, at_depth=True), 0.2)
-    assert c.state == State.RETRACTING and out.retract and not out.extend
-    c.step(replace(OK, at_home=True), DT)
-    assert c.state == State.IDLE and c.total_cuts == 1
+def ctl(state=State.CLAMPED, **kw) -> Controller:
+    c = Controller(cfg=CFG, **kw)
+    c.state = state
+    c.clamp_requested = True
+    return c
 
 
-def test_no_start_without_nut_or_away_from_home():
-    c = Controller()
-    assert not c.step(Inputs(nut_present=False, start=True), DT).extend
-    c = Controller()
-    assert not c.step(replace(OK, at_home=False, start=True), DT).extend
+# ------------------------------------------------------------------ functional
+
+def test_clamp_then_climb_then_stop_at_crown():
+    c = Controller(cfg=CFG)
+    out = c.step(Inputs(cmd=Cmd.CLAMP), DT)
+    assert out.clamp_target == CFG.N0 and c.state == State.GROUND
+    c.step(Inputs(cmd=Cmd.NONE, clamp_force=GRIP), DT)
+    assert c.state == State.CLAMPED
+    out = c.step(Inputs(cmd=Cmd.CLIMB, clamp_force=GRIP, enc_vel=0.3, imu_vel=0.3), DT)
+    assert out.drive == 1 and c.state == State.CLIMBING
+    out = c.step(replace(AIR, cmd=Cmd.CLIMB, enc_vel=0.3, imu_vel=0.3, at_crown=True), DT)
+    assert out.drive == 0 and c.state == State.CLAMPED
 
 
-def test_anti_tie_down_start_must_be_released():
-    c = Controller()
-    held = replace(OK, start=True)
-    c.step(held, DT)
-    c.step(replace(held, at_home=False, at_depth=True), DT)
-    run(c, replace(held, at_home=False, at_depth=True), 0.2)
-    c.step(held, DT)
-    assert c.state == State.IDLE
-    # start still held from the previous cycle -> no new stroke
-    for _ in range(50):
-        assert not c.step(held, DT).extend
-    c.step(OK, DT)  # release
-    assert c.step(held, DT).extend  # re-press
+def test_harvest_cycle_and_cut_counting():
+    c = ctl()
+    assert c.step(replace(AIR, cmd=Cmd.DEPLOY_ARM), DT).arm == 1
+    arm_out = replace(AIR, arm_stowed=False, arm_deployed=True)
+    assert not c.step(replace(arm_out, cmd=Cmd.CUT), DT).saw          # zone not confirmed
+    assert c.step(replace(arm_out, cmd=Cmd.CUT, zone_clear=True), DT).saw
+    assert not c.step(replace(arm_out, cmd=Cmd.NONE, zone_clear=True), DT).saw  # dead-man released
+    assert c.step(replace(arm_out, cmd=Cmd.CUT, zone_clear=True), DT).saw
+    assert c.cuts == 2
+    assert c.step(replace(arm_out, cmd=Cmd.STOW_ARM), DT).arm == -1
+    c.step(replace(AIR, cmd=Cmd.STOW_ARM), DT)
+    assert c.state == State.CLAMPED
 
 
-def test_jam_timeout_faults_and_needs_reset():
-    c = Controller()
-    c.step(replace(OK, start=True), DT)
-    out = run(c, replace(OK, at_home=False), c.cfg.extend_timeout + 0.1)
-    assert c.state == State.FAULT and not out.extend and c.faults == 1
-    assert not run(c, replace(OK, at_home=False), 1.0).retract   # no auto-recovery
-    out = c.step(replace(OK, at_home=False, reset=True), DT)
-    assert c.state == State.RETRACTING and out.retract
+def test_hold_to_run_releasing_the_button_stops_motion():
+    for state, cmd in ((State.CLIMBING, Cmd.CLIMB), (State.DESCENDING, Cmd.DESCEND)):
+        for other in (Cmd.NONE, Cmd.DEPLOY_ARM, Cmd.RELEASE, Cmd.CUT):
+            c = ctl(state)
+            assert c.step(replace(AIR, cmd=other), DT).drive == 0 and c.state == State.CLAMPED
 
 
-def test_guard_open_mid_stroke_stops_and_never_resumes_by_itself():
-    c = Controller()
-    c.step(replace(OK, start=True), DT)
-    out = c.step(replace(OK, at_home=False, guard_closed=False), DT)
-    assert c.state == State.STOPPED and not out.extend and not out.retract
-    out = run(c, replace(OK, at_home=False), 2.0)  # guard closed again
-    assert c.state == State.STOPPED and not out.extend
-    c.step(replace(OK, at_home=False, reset=True), DT)
-    assert c.state == State.RETRACTING
+def test_arm_never_deploys_near_the_ground():
+    c = ctl()
+    out = c.step(replace(AIR, altitude=1.0, cmd=Cmd.DEPLOY_ARM), DT)
+    assert out.arm == 0 and c.state == State.CLAMPED
 
 
-def test_estop_dumps_air_in_any_state():
-    for prefix in (0, 1, 3):
-        c = Controller()
-        c.step(replace(OK, start=True), DT)
-        run(c, replace(OK, at_home=False), DT * prefix)
-        out = c.step(replace(OK, estop_ok=False), DT)
-        assert out == Outputs(extend=False, retract=False, air_on=False)
-        assert c.state == State.ESTOP
-        # releasing the e-stop alone does nothing
-        assert run(c, replace(OK, at_home=False), 0.5) == Outputs()
-        c.step(replace(OK, at_home=False, reset=True), DT)
-        assert c.state == State.RETRACTING
+def test_wet_bark_wind_and_crown_block_climbing_but_not_descent():
+    for bad in (dict(bark_wet=True), dict(wind=15.0), dict(at_crown=True)):
+        c = ctl()
+        assert c.step(replace(AIR, cmd=Cmd.CLIMB, **bad), DT).drive == 0
+        assert c.step(replace(AIR, cmd=Cmd.DESCEND, **bad), DT).drive == -1
 
 
-def test_low_pressure_faults():
-    c = Controller()
-    c.step(replace(OK, start=True), DT)
-    out = c.step(replace(OK, at_home=False, pressure_ok=False), DT)
-    assert c.state == State.FAULT and not out.extend
+def test_low_battery_forces_descent_and_blocks_climb():
+    c = ctl()
+    low = replace(AIR, battery_wh=CFG.reserve(10.0) - 0.1)
+    assert c.step(replace(low, cmd=Cmd.CLIMB), DT).drive == -1
+    assert c.forced_descent
 
 
-def test_blade_swap_lockout():
-    c = Controller(cfg=Config(blade_interval=3))
-    for _ in range(3):
-        c.step(OK, DT)
-        c.step(replace(OK, start=True), DT)
-        c.step(replace(OK, at_home=False, at_depth=True), DT)
-        run(c, replace(OK, at_home=False, at_depth=True), 0.2)
-        c.step(OK, DT)
-    assert c.state == State.BLADE_DUE
-    c.step(OK, DT)
-    assert not c.step(replace(OK, start=True), DT).extend
-    c.step(replace(OK, reset=True, blade_swapped=True), DT)
-    assert c.state == State.IDLE and c.cuts_since_swap == 0
+def test_slip_boosts_clamp_and_faults():
+    c = ctl()
+    out = c.step(replace(AIR, imu_vel=-0.3), DT)
+    assert c.state == State.FAULT and c.fault_reason == "slip"
+    assert out.clamp_target == CFG.N0 * CFG.slip_boost and out.drive == 0
+
+
+def test_stall_faults_then_only_descent_allowed():
+    c = ctl()
+    c.step(replace(AIR, cmd=Cmd.CLIMB), DT)
+    for _ in range(int(CFG.stall_time / DT) + 2):
+        c.step(replace(AIR, cmd=Cmd.CLIMB, enc_vel=0.0, imu_vel=0.0), DT)
+    assert c.state == State.FAULT and c.fault_reason == "stall"
+    c.step(replace(AIR, cmd=Cmd.RESET), DT)
+    assert c.step(replace(AIR, cmd=Cmd.CLIMB), DT).drive == 0
+    assert c.step(replace(AIR, cmd=Cmd.DESCEND), DT).drive == -1
+
+
+def test_link_loss_stops_saw_in_the_same_scan():
+    c = ctl(State.HARVEST)
+    arm_out = replace(AIR, arm_stowed=False, arm_deployed=True, zone_clear=True, cmd=Cmd.CUT)
+    assert c.step(arm_out, DT).saw
+    out = c.step(replace(arm_out, comms_ok=False), DT)
+    assert out == Outputs(clamp_target=CFG.N0) and c.state == State.FAULT
+
+
+def test_estop_holds_clamp_in_air_and_requires_reset():
+    c = ctl(State.CLIMBING)
+    out = c.step(replace(AIR, estop=True, cmd=Cmd.CLIMB), DT)
+    assert out == Outputs(clamp_target=CFG.N0)
+    assert c.step(replace(AIR, cmd=Cmd.CLIMB), DT) == Outputs(clamp_target=CFG.N0)
+    c.step(replace(AIR, cmd=Cmd.RESET), DT)
+    assert c.state == State.CLAMPED
+
+
+def test_release_only_on_ground():
+    c = ctl()
+    assert c.step(replace(AIR, cmd=Cmd.RELEASE), DT).clamp_target == CFG.N0
+    out = c.step(Inputs(cmd=Cmd.RELEASE, clamp_force=GRIP, landed=True, altitude=0.0), DT)
+    assert out.clamp_target == 0.0 and c.state == State.GROUND
 
 
 # --------------------------------------------------------------- safety fuzz
 
-inputs = st.builds(
+sensors = st.builds(
     Inputs,
-    guard_closed=st.booleans(), curtain_clear=st.booleans(), estop_ok=st.booleans(),
-    pressure_ok=st.booleans(), nut_present=st.booleans(), at_home=st.booleans(),
-    at_depth=st.booleans(), start=st.booleans(), reset=st.booleans(), blade_swapped=st.booleans(),
-)
-# Bias towards mostly-healthy sequences so deep states are actually reached.
-healthy = st.builds(
-    Inputs,
-    guard_closed=st.just(True) | st.booleans(),
-    curtain_clear=st.just(True) | st.booleans(), estop_ok=st.just(True) | st.booleans(),
-    pressure_ok=st.just(True), nut_present=st.just(True) | st.booleans(),
-    at_home=st.booleans(), at_depth=st.booleans(), start=st.booleans(),
-    reset=st.booleans(), blade_swapped=st.booleans(),
+    cmd=st.sampled_from(list(Cmd)),
+    estop=st.booleans() | st.just(False),
+    comms_ok=st.just(True) | st.booleans(),
+    clamp_force=st.sampled_from([0.0, 200.0, 430.0, 500.0, 650.0]),
+    altitude=st.sampled_from([0.0, 0.03, 0.5, 1.5, 3.0, 12.0, 20.0]),
+    enc_vel=st.sampled_from([0.0, 0.01, 0.3, -0.3]),
+    imu_vel=st.sampled_from([0.0, 0.01, 0.3, -0.3]),
+    tilt=st.sampled_from([0.0, 10.0, 27.0, 35.0]),
+    battery_wh=st.sampled_from([1.0, 5.0, 12.0, 200.0]),
+    arm_stowed=st.booleans(), arm_deployed=st.booleans(),
+    bark_wet=st.just(False) | st.booleans(), zone_clear=st.booleans(),
+    at_crown=st.booleans(), landed=st.booleans(),
+    wind=st.sampled_from([0.0, 5.0, 12.0]),
 )
 
 
-@settings(max_examples=2000, deadline=None)
-@given(st.lists(st.one_of(inputs, healthy), min_size=1, max_size=200),
-       st.lists(st.floats(0.001, 0.5), min_size=1, max_size=200))
-def test_safety_invariants_hold_for_any_input_sequence(seq, dts):
-    c = Controller(cfg=Config(blade_interval=5))
-    prev_start = False
-    for k, i in enumerate(seq):
+@settings(max_examples=3000, deadline=None)
+@given(st.lists(sensors, min_size=1, max_size=120))
+def test_safety_functions_hold_on_every_scan(seq):
+    c = Controller(cfg=CFG)
+    for i in seq:
         before = c.state
-        out = c.step(i, dts[k % len(dts)])
-        # SF1/SF3: the punch only moves down when a hand cannot be in the zone
-        if out.extend:
-            assert i.guard_closed and i.curtain_clear and i.estop_ok and i.pressure_ok and i.nut_present
-            assert out.air_on and not out.retract
-        # retracting also needs the zone guarded
-        if out.retract:
-            assert i.guard_closed and i.curtain_clear and i.estop_ok
-        # SF2: e-stop always dumps air
-        if not i.estop_ok:
-            assert out == Outputs()
-        # SF4/SF5: a new downstroke only begins from IDLE on a fresh start edge
-        if c.state == State.EXTENDING and before != State.EXTENDING:
-            assert before == State.IDLE and i.start and not prev_start
-        # SF5: no path from a stop/fault/e-stop back to motion without reset
-        if before in (State.STOPPED, State.FAULT, State.ESTOP) and c.state not in (before, State.ESTOP):
-            assert i.reset
-        prev_start = i.start
+        out = c.step(i, DT)
+        on_ground = i.landed and i.altitude <= CFG.landed_alt
+        clamped = i.clamp_force >= CFG.clamp_ok_frac * CFG.N0
+        # SF1
+        if out.clamp_target == 0.0:
+            assert on_ground
+        # SF2
+        if out.saw:
+            assert (i.arm_deployed and i.zone_clear and i.comms_ok and not i.estop and i.cmd == Cmd.CUT
+                    and out.drive == 0 and clamped and i.wind <= CFG.wind_max and out.arm == 0)
+        # SF3
+        if out.drive != 0:
+            assert clamped and i.arm_stowed and not out.saw and i.comms_ok and not i.estop
+            assert abs(i.tilt) <= CFG.tilt_max and out.arm == 0
+        # SF6
+        if out.drive == 1:
+            assert not i.bark_wet and i.wind <= CFG.wind_max and not i.at_crown
+            assert i.battery_wh > CFG.reserve(i.altitude)
+        if out.drive == -1:
+            assert not on_ground
+        # SF4
+        if i.estop or not i.comms_ok:
+            assert out.drive == 0 and not out.saw and out.arm == 0
+            if not on_ground:
+                assert out.clamp_target >= CFG.N0
+        # SF5: no motion out of FAULT/ESTOP without a reset
+        if before in (State.FAULT, State.ESTOP) and out.drive != 0:
+            raise AssertionError("moved straight out of a fault")
+        if out.arm != 0:
+            assert out.drive == 0
 
 
-# -------------------------------------------------- closed loop with a plant
+# ------------------------------------------------- model-based safety fuzz
+# Random inputs rarely reach deep states (clamped, high up, arm out, cutting).
+# Here a tiny plant keeps the sensors plausible and hypothesis injects faults
+# on top, so every safety function is exercised mid-mission.
 
-class Cylinder:
-    """Kinematic plant: moves at design speeds, stalls if the cut needs more force than available."""
-
-    def __init__(self, design, nut: Coconut, dull: float):
-        self.d, self.nut = design, nut
-        self.x = 0.0
-        self.travel = design.travel(nut)
-        self.contact = self.travel - design.depth_cut
-        self.stall = design.required_force(nut, dull) > design.force_available
-
-    def step(self, out: Outputs, dt: float) -> None:
-        if out.extend:
-            nxt = self.x + self.d.kin.extend_speed * dt
-            if self.stall and nxt > self.contact + self.nut.husk_top:
-                nxt = self.x  # stalled in the shell
-            self.x = min(nxt, self.travel)
-        elif out.retract:
-            self.x = max(0.0, self.x - self.d.kin.retract_speed * dt)
-
-    def sensors(self, **kw) -> Inputs:
-        return Inputs(nut_present=True, at_home=self.x <= 0.5,
-                      at_depth=self.x >= self.travel - 1e-9, **kw)
+FAULTS = st.fixed_dictionaries({}, optional={
+    "estop": st.just(True), "comms_ok": st.just(False), "clamp_force": st.sampled_from([0.0, 300.0]),
+    "tilt": st.sampled_from([30.0, 40.0]), "wind": st.sampled_from([11.0, 15.0]),
+    "bark_wet": st.just(True), "zone_clear": st.just(False), "battery_wh": st.sampled_from([0.5, 3.0, 8.0]),
+    "imu_vel": st.sampled_from([-0.3, 0.3]), "at_crown": st.just(True),
+    "arm_stowed": st.booleans(), "arm_deployed": st.booleans(),
+})
+# Single isolated faults: combinations often mask each other (an e-stop hides everything else).
+FAULT1 = st.sampled_from([
+    {"estop": True}, {"comms_ok": False}, {"clamp_force": 0.0}, {"clamp_force": 300.0}, {"tilt": 40.0},
+    {"wind": 15.0}, {"bark_wet": True}, {"zone_clear": False}, {"battery_wh": 0.5}, {"battery_wh": 3.0},
+    {"battery_wh": 8.0}, {"imu_vel": -0.3}, {"imu_vel": 0.3}, {"at_crown": True},
+    {"arm_stowed": False}, {"arm_deployed": True}, {"arm_deployed": False}, {"landed": True},
+])
+STEP = st.tuples(st.sampled_from(list(Cmd)), st.one_of(st.just({}), st.just({}), FAULTS))
 
 
-def cycle(c: Controller, cyl: Cylinder, max_t: float = 5.0) -> float:
-    t, out = 0.0, c.step(cyl.sensors(start=True), DT)
-    while t < max_t:
-        cyl.step(out, DT)
-        t += DT
-        out = c.step(cyl.sensors(), DT)
-        if c.state in (State.IDLE, State.BLADE_DUE, State.FAULT):
-            break
-    return t
+@settings(max_examples=1500, deadline=None)
+@given(st.lists(STEP, min_size=5, max_size=300))
+def test_safety_functions_hold_mid_mission(steps):
+    c = Controller(cfg=CFG)
+    alt, arm, clamp, out = 0.0, 0.0, 0.0, Outputs()
+    for cmd, fault in steps:
+        # plausible plant response to the previous outputs
+        clamp += (out.clamp_target - clamp) * 0.6
+        arm = min(1.0, max(0.0, arm + out.arm * 0.4))
+        v = 0.4 * out.drive
+        alt = max(0.0, alt + v * 1.0)
+        base = dict(cmd=cmd, clamp_force=clamp, altitude=alt, enc_vel=v, imu_vel=v,
+                    arm_stowed=arm <= 0.0, arm_deployed=arm >= 1.0, landed=alt <= 0.02,
+                    zone_clear=True, battery_wh=200.0, tilt=5.0, wind=3.0)
+        i = Inputs(**{**base, **fault})
+        before = c.state
+        out = c.step(i, DT)
+        on_ground = i.landed and i.altitude <= CFG.landed_alt
+        clamped = i.clamp_force >= CFG.clamp_ok_frac * CFG.N0
+        if out.clamp_target == 0.0:
+            assert on_ground
+        if out.saw:
+            assert (i.arm_deployed and i.zone_clear and i.comms_ok and not i.estop and i.cmd == Cmd.CUT
+                    and clamped and i.wind <= CFG.wind_max and out.drive == 0)
+        if out.drive != 0:
+            assert clamped and i.arm_stowed and i.comms_ok and not i.estop and abs(i.tilt) <= CFG.tilt_max
+        if out.drive == 1:
+            assert not i.bark_wet and i.wind <= CFG.wind_max and not i.at_crown
+            assert i.battery_wh > CFG.reserve(i.altitude)
+        if i.estop or not i.comms_ok:
+            assert out.drive == 0 and not out.saw and out.arm == 0
+        if before in (State.FAULT, State.ESTOP):
+            assert out.drive == 0 and not out.saw
 
 
-def test_closed_loop_10k_nuts_with_crown_swap_no_faults_and_cycle_time_matches_model(design):
-    c = Controller(cfg=Config(blade_interval=design.req.blade_resharpen_cuts))
-    rng = random.Random(1)
-    for n in range(10_000):
-        nut = design.pop.sample(rng)
-        dull = 1 + (design.req.blade_dull_at_swap - 1) * (c.cuts_since_swap / c.cfg.blade_interval)
-        cyl = Cylinder(design, nut, dull)
-        t = cycle(c, cyl)
-        assert c.state in (State.IDLE, State.BLADE_DUE), (n, c.state)
-        if c.state == State.BLADE_DUE:  # operator swaps the crown and resets
-            c.step(cyl.sensors(reset=True, blade_swapped=True), DT)
-            assert c.state == State.IDLE
-        # sampled control loop adds at most a few scans to the analytic machine time
-        assert abs(t - (design.machine_time(nut) - 2 * design.kin.valve_response)) < 6 * DT
-    assert c.faults == 0 and c.total_cuts == 10_000
-    assert c.cuts_since_swap == 10_000 - design.req.blade_resharpen_cuts
+MISSION = ([Cmd.CLAMP] * 4 + [Cmd.CLIMB] * 10 + [Cmd.DEPLOY_ARM] * 4 + [Cmd.CUT] * 5 + [Cmd.NONE]
+           + [Cmd.CUT] * 3 + [Cmd.STOW_ARM] * 4 + [Cmd.DESCEND] * 12 + [Cmd.RELEASE] * 2)
+PERTURB = st.lists(
+    st.tuples(st.integers(0, len(MISSION) - 1), st.one_of(st.none(), st.sampled_from(list(Cmd))),
+              st.one_of(FAULT1, FAULT1, FAULTS),
+              st.integers(1, 4)),
+    min_size=1, max_size=4)
 
 
-def test_closed_loop_out_of_spec_nut_faults_instead_of_crushing(design):
-    rock_hard = Coconut(180, 220, husk_top=20, shell=5, strength=9.0, mass=1.8)
-    c = Controller()
-    cyl = Cylinder(design, rock_hard, 1.0)
-    assert cyl.stall
-    cycle(c, cyl)
-    assert c.state == State.FAULT and c.faults == 1
-    # operator resets -> machine returns home and is usable again
-    out = c.step(cyl.sensors(reset=True), DT)
-    while c.state == State.RETRACTING:
-        cyl.step(out, DT)
-        out = c.step(cyl.sensors(), DT)
-    assert c.state == State.IDLE and cyl.x == 0.0
+def check_scan(c, i, out, before):
+    on_ground = i.landed and i.altitude <= CFG.landed_alt
+    # SF8 hold-to-run
+    if out.drive == 1:
+        assert i.cmd == Cmd.CLIMB
+    if out.drive == -1:
+        assert i.cmd == Cmd.DESCEND or (c.forced_descent and i.cmd != Cmd.STOP)
+    clamped = i.clamp_force >= CFG.clamp_ok_frac * CFG.N0
+    if out.clamp_target == 0.0:
+        assert on_ground
+    if out.saw:
+        assert (i.arm_deployed and i.zone_clear and i.comms_ok and not i.estop and i.cmd == Cmd.CUT
+                and clamped and i.wind <= CFG.wind_max and out.drive == 0)
+    if out.drive != 0:
+        assert clamped and i.arm_stowed and i.comms_ok and not i.estop and abs(i.tilt) <= CFG.tilt_max
+    if out.drive == 1:
+        assert not i.bark_wet and i.wind <= CFG.wind_max and not i.at_crown
+        assert i.battery_wh > CFG.reserve(i.altitude)
+    if i.estop or not i.comms_ok:
+        assert out.drive == 0 and not out.saw and out.arm == 0
+    if before in (State.FAULT, State.ESTOP):
+        assert out.drive == 0 and not out.saw
+
+
+@settings(max_examples=2500, deadline=None)
+@given(PERTURB)
+def test_safety_functions_under_faults_injected_into_a_real_mission(perturb):
+    """A full harvest script; hypothesis injects faults / stray commands at arbitrary points."""
+    inject = {}
+    for pos, cmd, fault, dur in perturb:
+        for k in range(pos, min(len(MISSION), pos + dur)):
+            inject[k] = (cmd, fault)
+    c = Controller(cfg=CFG)
+    alt, arm, clamp, out = 0.0, 0.0, 0.0, Outputs()
+    for k, cmd in enumerate(MISSION):
+        clamp += (out.clamp_target - clamp) * 0.6
+        arm = min(1.0, max(0.0, arm + out.arm * 0.4))
+        v = 0.4 * out.drive
+        alt = max(0.0, alt + v)
+        over_cmd, fault = inject.get(k, (None, {}))
+        base = dict(cmd=over_cmd or cmd, clamp_force=clamp, altitude=alt, enc_vel=v, imu_vel=v,
+                    arm_stowed=arm <= 0.0, arm_deployed=arm >= 1.0, landed=alt <= 0.02,
+                    zone_clear=True, battery_wh=200.0, tilt=5.0, wind=3.0)
+        i = Inputs(**{**base, **fault})
+        before = c.state
+        out = c.step(i, DT)
+        check_scan(c, i, out, before)
+
+
+def test_scripted_mission_reaches_every_state_without_faults():
+    c = Controller(cfg=CFG)
+    alt, arm, clamp, out, seen = 0.0, 0.0, 0.0, Outputs(), set()
+    for cmd in MISSION:
+        clamp += (out.clamp_target - clamp) * 0.6
+        arm = min(1.0, max(0.0, arm + out.arm * 0.4))
+        v = 0.4 * out.drive
+        alt = max(0.0, alt + v)
+        out = c.step(Inputs(cmd=cmd, clamp_force=clamp, altitude=alt, enc_vel=v, imu_vel=v, arm_stowed=arm <= 0,
+                            arm_deployed=arm >= 1, landed=alt <= 0.02, zone_clear=True), DT)
+        seen.add(c.state)
+    assert {State.GROUND, State.CLAMPED, State.CLIMBING, State.HARVEST, State.DESCENDING} <= seen
+    assert c.cuts == 2 and c.state == State.GROUND
