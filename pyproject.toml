@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "coconut-cutter"
+version = "1.0.0"
+description = "Parametric design, safety controller and production-scale verification of a pneumatic tender-coconut opening machine"
+requires-python = ">=3.10"
+dependencies = []
+
+[project.optional-dependencies]
+test = ["pytest>=7", "hypothesis>=6"]
+
+[project.scripts]
+coconut-cutter = "coconut_cutter.cli:main"
+
+[tool.setuptools]
+packages = ["coconut_cutter"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = ["prodscale: long-running full-year verification (run with -m prodscale)"]
+addopts = "-m 'not prodscale'"
