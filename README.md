@@ -1,78 +1,95 @@
 # coconut-harvester
 
-Design, safety controller and plantation-scale verification of a **coconut-palm climbing and
-harvesting robot**. Two people clamp a ring robot around the trunk. It climbs to the crown, the
-operator cuts ripe bunches with an arm-mounted circular saw using the mast camera, and the robot
-comes back down. Nobody climbs the tree.
+Design, safety controllers and plantation-scale verification of a **coconut-palm climbing and
+harvesting robot**. Nobody climbs the tree.
 
-**Full report:** [`docs/DESIGN.md`](docs/DESIGN.md). It is generated from the model and includes
-the drawing, mass breakdown, checks, fleet sizing and safety functions.
+The repo holds two concepts, compared head to head in the same models:
 
-![robot](docs/robot.svg)
+- **v2, the reimagined design (recommended): inchworm with self-locking collars.** Two strap
+  collars grip harder the more load they carry, and one electric cylinder walks them up the trunk.
+- **v1: wheel ring.** Six driven wheels are clamped onto the trunk and climb on friction.
 
-## Headline numbers
+**Full report:** [`docs/DESIGN.md`](docs/DESIGN.md), generated from the models: drawings, checks,
+comparison, sensitivity and safety.
 
-| | |
-|---|---|
-| Robot | 39.3 kg; 2 clamp tiers × 3 Ø150 PU wheels, 530 N preload each; 6 self-locking worm gearmotors |
-| Climb | 0.39 m/s on trunks Ø143–420 mm, up to 22 m and 20° lean, over leaf-scar ridges |
-| Saw | Ø235 mm TCT blade, 150 W BLDC, 0.7 m reach, cuts a 75 mm stalk in under 10 s |
-| Energy | ~7 Wh per tree, so about 29 trees per 10 Ah pack; 3 hot-swap packs per robot |
-| Plantation | **17 robots (+1 spare)** harvest 17,500 palms (100 ha) on a 45-day round, including monsoon |
+![inchworm robot](docs/robot.svg)
+
+## Why v2
+
+| | Wheel ring (v1) | **Inchworm (v2)** |
+|---|---|---|
+| Mass | 39.3 kg | **19.0 kg** |
+| Climbs wet bark | no | **yes** |
+| Leaf-scar ridges matter | yes, they size the motors | no |
+| Robots for a 100 ha / 17,500-palm estate | 17 | **7** |
+
+Per tree the two are about equal: v2 climbs more slowly but straps on faster. **The fleet saving comes
+entirely from working through the monsoon.** v1 loses about 10,000 robot-hours a year to wet bark.
+Even under pessimistic assumptions v2 needs 9–12 robots. If it turned out not to climb wet bark
+after all, it would need 17, the same as v1. So the first thing to measure is wet-bark self-lock
+on real trunks.
+
+## How v2 works
+
+- **Collar:** a rubber V-pad on one side of the trunk and a steel-cored strap on the other, with a
+  cantilever arm. Weight on the arm cocks the collar, giving normal force N = M/h. It holds when
+  lever L ≥ h/(2μ), whatever the load.
+- **Climbing step:**
+  1. Release the upper collar.
+  2. Extend: the upper collar rises.
+  3. Lock the upper collar and release the lower one.
+  4. Retract: the lower collar rises.
+- **Fail-safe:** release servos are spring-return, so with no power both collars lock.
+- **Harvest tensioner:** the physics model showed that with the saw swung to the far side, the
+  collar would let go. A small self-locking strap tensioner clamps the upper collar before the arm
+  may deploy.
 
 ## Layout
 
 ```
 coconut_harvester/
-  tree.py        palm population (fit to a field survey) + monsoon weather calendar
-  design.py      grip/tipping/ridge physics, drive, clamp, saw, battery, mass roll-up, optimiser
-  controller.py  supervisory controller with safety functions SF1-SF8
-  robot_sim.py   closed loop: controller + mission executive + robot/trunk physics
-  fleet.py       year-long plantation simulation, fleet sizing to a service level
-  report.py      docs/DESIGN.md and docs/robot.svg
+  tree.py               palm population (fit to a survey) + monsoon weather
+  inchworm.py           v2 physics & sizing: self-lock, tensioner, cylinder, arms, battery, mass
+  inchworm_control.py   v2 controller (IW1-IW9), physics plant, mission executive
+  design.py             v1 physics & sizing
+  controller.py         v1 controller (SF1-SF8)
+  robot_sim.py          v1 plant & mission executive
+  fleet.py              year-long plantation sim, fleet sized to a service level (either concept)
+  compare.py            v2 sensitivity study
+  report.py             docs/DESIGN.md, docs/robot.svg, docs/wheel_robot.svg
 ```
-
-The design converges mass, grip force, motors and battery together, because each depends on the
-others. `optimize()` then picks the lightest catalogue combination that passes every check.
 
 ## Run
 
 ```bash
 pip install -e ".[test]"
-pytest -q                      # 47 tests, ~2-3 min on 4 cores
-pytest -q -s -m prodscale      # 1,000 ha estate (175k palms) + 20k closed-loop missions
-coconut-harvester report       # regenerate docs/ (CI fails if it drifts)
-coconut-harvester simulate --robots 17
+pytest -q                      # 74 tests, ~3 min on 4 cores
+pytest -q -s -m prodscale      # 1,000 ha estates + 20k (v1) / 5k (v2) closed-loop missions
+coconut-harvester report       # regenerate docs/ (~5 min; CI fails if it drifts)
+coconut-harvester simulate --robots 7 --concept inchworm
 ```
 
-## What the tests prove
+## What the tests prove (v2)
 
-- **Physics and design.** All 15 checks pass, including climb traction on the worst ridge, wet
-  hold, wheel unloading at full reach and maximum lean, self-locking drives, cut time, battery
-  reserve, carry mass and the belay tether. 200,000 sampled palms are all climbable when dry
-  and holdable when wet. For random assumption sets, any design that reports `ok` really
-  serves its population.
-- **Safety.** SF1–SF8 are checked on every scan under three kinds of fuzz: random input streams,
-  plausible-plant streams with injected faults, and full harvest scripts with faults injected
-  at arbitrary points.
-  - **Mutation testing:** each of 10 safety rules was deleted in turn, and the tests caught every one.
-  - **Found by the fuzz:** the robot kept climbing after the operator released the button.
-    It is now hold-to-run (SF8).
-- **Closed loop.** 1,000 full harvests run with zero faults, and the energy and timing match the
-  analytic model.
-  - **Wet bark:** never climbed. Rain mid-climb makes the robot stop and come down.
-  - **Disturbances:** the robot catches a sudden slip and holds. An out-of-envelope ridge stalls
-    it and it returns. A low battery forces it home with charge to spare. A radio drop
-    mid-cut stops the saw in the same scan.
-- **Plantation scale.** 17 robots meet the round in 27 of 30 simulated weather years, and still
-  meet the service level on 10 fresh years. 16 robots do not. A single battery pack per robot
-  starves; three never do.
+- **Design.** All 18 checks pass. 200,000 sampled palms are climbable and holdable on wet or dry bark.
+  For random assumption sets, any design that reports `ok` really holds its population.
+- **Safety.** IW1–IW9 are checked on every scan, under random input streams and under full harvest
+  scripts with injected faults.
+  - **Mutation testing:** 13 single-rule deletions; 12 are caught. The 13th is an equivalent mutant
+    (defence in depth).
+  - **Found by the fuzz:** a brake-and-relock path slackened the harvest tensioner while the arm was
+    out. It is now enforced by construction.
+- **Closed loop.** 500 missions, half on wet bark, finish with zero faults and zero falls.
+  - **Sap patch:** the robot slips, faults and holds.
+  - **Radio loss mid-step:** both collars lock and the robot doesn't move.
+  - **Low battery:** the robot comes home with charge to spare.
+- **Plantation.** 7 robots meet the harvest round in every one of 30 simulated weather years and
+  in 10 fresh ones. 6 robots do not.
 
 ## Assumptions to replace before building
 
-The tree population, bark friction (especially wet) and leaf-scar ridge geometry are
-engineering estimates, and they drive the clamp force and the whole mass budget. Survey at
-least 50 palms per estate, fit them with `TreePopulation.from_survey()`, measure stalk cutting
-energy with the chosen blade, and regenerate. Then prototype tests: slip and pull-off on real
-trunks, 1,000-climb endurance, belay drop test, rain exposure, and ISO 13849-2 validation of the
-safety functions. Finally, calibrate the fleet model's mounting and aiming times on a pilot block.
+1. **Wet-bark self-lock rig:** measure collar slip load against lever on real trunks, wet and dry.
+2. **Pilot block:** log how much of a rainy day is actually workable.
+3. **Palm survey and stalk cutting energy:** fit `TreePopulation.from_survey()` and regenerate.
+4. **Prototype tests:** collar and cylinder endurance, tensioner under saw vibration, belay drop
+   test, and ISO 13849-2 validation of the safety functions.

@@ -1,0 +1,71 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 560" width="900" height="560" font-family="Helvetica,Arial,sans-serif" font-size="11">
+<style>.tr{fill:#b89b72;stroke:#6b5235}.m{fill:#c9d3dc;stroke:#2b3a48;stroke-width:1.2}.w{fill:#3a4652;stroke:#111}.s{fill:#c0392b;stroke:#7b1e14}.g{fill:#7fb55a;stroke:#3d6b25}.d{stroke:#b5402a;stroke-width:.8;fill:none}.t{fill:#1b2733}.dt{fill:#b5402a}.c{stroke:#888;stroke-dasharray:6 3 1 3}.lf{fill:none;stroke:#4f8a3a;stroke-width:3}</style>
+<rect width="900" height="560" fill="#fbfbf8"/>
+<text x="14" y="22" class="t" font-size="13" font-weight="bold">Palm-climbing harvest robot: side view at the crown (left), section through one clamp tier (right). Schematic.</text>
+<rect class="tr" x="292.5" y="60" width="75.0" height="460.0"/>
+<line x1="292.5" y1="80" x2="367.5" y2="83" stroke="#8a6f4c"/>
+<line x1="292.5" y1="112" x2="367.5" y2="115" stroke="#8a6f4c"/>
+<line x1="292.5" y1="144" x2="367.5" y2="147" stroke="#8a6f4c"/>
+<line x1="292.5" y1="176" x2="367.5" y2="179" stroke="#8a6f4c"/>
+<line x1="292.5" y1="208" x2="367.5" y2="211" stroke="#8a6f4c"/>
+<line x1="292.5" y1="240" x2="367.5" y2="243" stroke="#8a6f4c"/>
+<line x1="292.5" y1="272" x2="367.5" y2="275" stroke="#8a6f4c"/>
+<line x1="292.5" y1="304" x2="367.5" y2="307" stroke="#8a6f4c"/>
+<line x1="292.5" y1="336" x2="367.5" y2="339" stroke="#8a6f4c"/>
+<line x1="292.5" y1="368" x2="367.5" y2="371" stroke="#8a6f4c"/>
+<line x1="292.5" y1="400" x2="367.5" y2="403" stroke="#8a6f4c"/>
+<line x1="292.5" y1="432" x2="367.5" y2="435" stroke="#8a6f4c"/>
+<line x1="292.5" y1="464" x2="367.5" y2="467" stroke="#8a6f4c"/>
+<line x1="292.5" y1="496" x2="367.5" y2="499" stroke="#8a6f4c"/>
+<path class="lf" d="M330.0 75 Q258.0 50 162.0 105"/>
+<path class="lf" d="M330.0 75 Q294.0 25 246.0 80"/>
+<path class="lf" d="M330.0 75 Q366.0 25 414.0 80"/>
+<path class="lf" d="M330.0 75 Q402.0 50 498.0 105"/>
+<rect class="m" x="243.75" y="324.0" width="172.5" height="12" rx="3"/>
+<circle class="w" cx="273.75" cy="330.0" r="18.75"/>
+<circle class="w" cx="386.25" cy="330.0" r="18.75"/>
+<rect class="m" x="412.25" y="308.0" width="26" height="16"/>
+<rect class="m" x="243.75" y="424.0" width="172.5" height="12" rx="3"/>
+<circle class="w" cx="273.75" cy="430.0" r="18.75"/>
+<circle class="w" cx="386.25" cy="430.0" r="18.75"/>
+<rect class="m" x="412.25" y="408.0" width="26" height="16"/>
+<line x1="253.75" y1="330.0" x2="253.75" y2="430.0" stroke="#2b3a48" stroke-width="3"/>
+<line x1="406.25" y1="330.0" x2="406.25" y2="430.0" stroke="#2b3a48" stroke-width="3"/>
+<rect class="m" x="209.75" y="420.0" width="30" height="40"/>
+<rect class="m" x="402.25" y="180.0" width="10" height="150"/>
+<line x1="407.25" y1="185.0" x2="155.0" y2="155.0" stroke="#2b3a48" stroke-width="5"/>
+<circle class="s" cx="155.0" cy="125.625" r="29.375"/>
+<circle cx="155.0" cy="125.625" r="4" fill="#222"/>
+<circle class="g" cx="125.0" cy="210.0" r="9"/>
+<circle class="g" cx="139.0" cy="216.0" r="9"/>
+<circle class="g" cx="113.0" cy="218.0" r="9"/>
+<circle class="g" cx="129.0" cy="228.0" r="9"/>
+<circle class="g" cx="143.0" cy="232.0" r="9"/>
+<circle class="g" cx="119.0" cy="236.0" r="9"/>
+<line x1="292.5" y1="140.0" x2="125.0" y2="205.0" stroke="#6b8a3a" stroke-width="5"/>
+<line class="c" x1="330.0" y1="50" x2="330.0" y2="520.0"/>
+<line class="d" x1="456.25" y1="330.0" x2="456.25" y2="430.0"/>
+<text class="dt" x="461.25" y="384.0">tier spacing 400</text>
+<line class="d" x1="330.0" y1="100.0" x2="155.0" y2="100.0"/>
+<text class="dt" x="159.0" y="94.0">reach 700 from trunk axis</text>
+<text class="t" text-anchor="end" x="119.625" y="129.625">Ø235 saw, 150 W</text>
+<text class="t" x="442.25" y="318.0">WG-20 worm drive ×6</text>
+<text class="t" x="207.75" y="476.0">10 Ah pack</text>
+<text class="t" x="300.0" y="535.0">palm trunk</text>
+<circle class="tr" cx="715.0" cy="300.0" r="69.75"/>
+<circle cx="715.0" cy="300.0" r="162.0" fill="none" stroke="#2b3a48" stroke-width="9" opacity=".35"/>
+<line x1="545.0" y1="300.0" x2="565.0" y2="300.0" stroke="#2b3a48" stroke-width="3"/>
+<text class="t" x="483.0" y="292.0">hinge</text>
+<text class="t" x="873.0" y="292.0">latch</text>
+<line x1="715.0" y1="462.0" x2="715.0" y2="403.5" stroke="#2b3a48" stroke-width="6"/>
+<rect class="w" x="-33.75" y="-11.25" width="67.5" height="22.5" transform="translate(715.0 403.5) rotate(90.0)"/>
+<path class="d" d="M705.6796091403278 465.62357754476676 l-8.572527594031472e-16 -14.0"/>
+<line x1="574.7038845869209" y1="219.0" x2="625.3663707083106" y2="248.25" stroke="#2b3a48" stroke-width="6"/>
+<rect class="w" x="-33.75" y="-11.25" width="67.5" height="22.5" transform="translate(625.3663707083106 248.25) rotate(210.00000000000003)"/>
+<path class="d" d="M576.2259698104062 209.11651596994017 l12.12435565298214 7.000000000000002"/>
+<line x1="855.296115413079" y1="218.99999999999994" x2="804.6336292916894" y2="248.24999999999994" stroke="#2b3a48" stroke-width="6"/>
+<rect class="w" x="-33.75" y="-11.25" width="67.5" height="22.5" transform="translate(804.6336292916894 248.24999999999994) rotate(330.0)"/>
+<path class="d" d="M863.094421049266 225.25990648529304 l-12.124355652982137 7.000000000000006"/>
+<text class="t" x="655.0" y="492.0">3 wheels @120°, preload 530 N each</text>
+<text class="t" x="655.0" y="508.0">trunk Ø143–420 mm</text>
+</svg>

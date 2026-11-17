@@ -73,3 +73,47 @@ def test_fast_path_energy_matches_design_model(design):
         fast = (design.energy_climb(t.height) + design.energy_descend(t.height) + elec * 2 * t.height / design.speed
                 + sum(design.saw_w * (design.cut_time(p) + 3) / 3600 + 0.06 + elec * ops.aim_s for p in peds))
         assert fast == pytest.approx(design.energy_tree(t, peds, dwell_s=len(peds) * ops.aim_s), rel=1e-12)
+
+
+# ---------------------------------------------------------- reimagined concept
+
+def test_inchworm_fleet_meets_service_level_with_fewer_robots(iw, iw_fleet, fleet, plantation):
+    assert iw_fleet.ok
+    assert iw_fleet.robots < fleet.robots
+    from concurrent.futures import ProcessPoolExecutor
+    from coconut_harvester.fleet import _year
+    from coconut_harvester.tree import Weather
+    with ProcessPoolExecutor() as pool:
+        ys = list(pool.map(_year, [(iw, iw_fleet.robots - 1, plantation, Ops(), Weather(), s) for s in range(30)]))
+    assert not FleetSize(iw_fleet.robots - 1, ys, iw_fleet.service).ok  # not oversized
+
+
+def test_inchworm_works_wet_days_wheel_does_not(design, iw):
+    w = simulate_year(design, 3, SMALL, seed=9)
+    i = simulate_year(iw, 3, SMALL, seed=9)
+    # Wet day: inchworm loses ~30 % of the shift (50-90 % workable); wheel loses ~79 %
+    # (≤ 3 dry hours of 7). Expected ratio ≈ 0.30 / 0.79 ≈ 0.38.
+    assert i.lost_wet_hours < 0.5 * w.lost_wet_hours
+
+
+def test_inchworm_advantage_is_the_monsoon(iw):
+    """Grounded on wet bark like the wheel robot, the inchworm loses its fleet advantage."""
+    import copy
+    grounded = copy.copy(iw)
+    grounded.climbs_wet = False
+    a = simulate_year(iw, 2, SMALL, seed=3)
+    b = simulate_year(grounded, 2, SMALL, seed=3)
+    assert b.lost_wet_hours > 2 * a.lost_wet_hours  # ≈ 0.79 / 0.30
+    assert b.max_late > a.max_late
+
+
+def test_inchworm_fast_path_energy(iw):
+    import random
+    rng = random.Random(8)
+    for _ in range(200):
+        t = iw.pop.sample(rng)
+        peds = iw.pop.bunches(rng, 45)
+        elec = iw.req.electronics_w / 3600
+        fast = iw.energy_base(t) + sum(iw.saw_w * (iw.cut_time(p) + 3) / 3600 + 0.06 + elec * Ops().aim_s
+                                       for p in peds)
+        assert fast == pytest.approx(iw.energy_tree(t, peds, dwell_s=len(peds) * Ops().aim_s), rel=1e-12)

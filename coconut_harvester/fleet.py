@@ -39,8 +39,8 @@ class Plantation:
 @dataclass(frozen=True)
 class Ops:
     trolley_speed: float = 0.7       # m/s between trees
-    mount_s: float = 100.0           # lift onto trunk, close & latch ring
-    dismount_s: float = 45.0
+    mount_s: Optional[float] = None  # default: the design's own mount / dismount time
+    dismount_s: Optional[float] = None
     handling_cv: float = 0.30
     aim_s: float = 30.0              # find & line up each bunch on the camera
     aim_cv: float = 0.5
@@ -88,18 +88,19 @@ def _ln(rng: random.Random, mean: float, cv: float) -> float:
     return rng.lognormvariate(*_lnp(mean, cv))
 
 
-def tree_visit(d: Design, tree: Tree, peduncles: List[float], ops: Ops, pl: Plantation,
+def tree_visit(d, tree: Tree, peduncles: List[float], ops: Ops, pl: Plantation,
                rng: random.Random) -> float:
     """Seconds for one complete visit (walk-in to walk-off), excluding swaps."""
     t = pl.spacing_m / ops.trolley_speed
-    t += _ln(rng, ops.mount_s, ops.handling_cv) + _ln(rng, ops.dismount_s, ops.handling_cv)
-    t += 2 * tree.height / d.speed * 1.08 + 6.0  # ridge slow-downs, clamp/release
+    t += _ln(rng, ops.mount_s or d.mount_s, ops.handling_cv) + _ln(rng, ops.dismount_s or d.dismount_s,
+                                                                  ops.handling_cv)
+    t += d.climb_time(tree) + d.descend_time(tree)
     if peduncles:
         t += ops.arm_s + sum(_ln(rng, ops.aim_s, ops.aim_cv) + d.cut_time(p) + 1.0 for p in peduncles)
     return t
 
 
-def simulate_year(d: Design, robots: int, pl: Plantation = Plantation(), ops: Ops = Ops(),
+def simulate_year(d, robots: int, pl: Plantation = Plantation(), ops: Ops = Ops(),
                   weather: Weather = Weather(), seed: int = 0, days: int = 365,
                   pop: Optional[TreePopulation] = None) -> YearResult:
     rng = random.Random(seed)
@@ -115,13 +116,13 @@ def simulate_year(d: Design, robots: int, pl: Plantation = Plantation(), ops: Op
     reserve = d.descent_reserve(pop.height.hi)
 
     # Hot-loop constants (equivalent to Design.energy_tree / tree_visit; see test_fleet).
-    mount_p, dism_p, aim_p = (_lnp(ops.mount_s, ops.handling_cv), _lnp(ops.dismount_s, ops.handling_cv),
-                              _lnp(ops.aim_s, ops.aim_cv))
+    mount_p = _lnp(ops.mount_s or d.mount_s, ops.handling_cv)
+    dism_p = _lnp(ops.dismount_s or d.dismount_s, ops.handling_cv)
+    aim_p = _lnp(ops.aim_s, ops.aim_cv)
     walk = pl.spacing_m / ops.trolley_speed
     elec = d.req.electronics_w / 3600.0
-    base_e = [d.energy_climb(t.height) + d.energy_descend(t.height) + elec * 2 * t.height / d.speed
-              for t in trees]
-    base_t = [walk + 2 * t.height / d.speed * 1.08 + 6.0 for t in trees]
+    base_e = [d.energy_base(t) for t in trees]
+    base_t = [walk + d.climb_time(t) + d.descend_time(t) for t in trees]
     per_bunch_e = 0.06 + elec * ops.aim_s
     lnv = rng.lognormvariate
 
@@ -134,7 +135,7 @@ def simulate_year(d: Design, robots: int, pl: Plantation = Plantation(), ops: Op
     for day in range(days):
         if day % 7 not in pl.workdays:
             continue
-        hours = weather.productive_hours(day, pl.shift_h, rng)
+        hours = weather.productive_hours(day, pl.shift_h, rng, wet_bark_ok=d.climbs_wet)
         res.lost_wet_hours += (pl.shift_h - hours) * robots
         for r in range(robots):
             t = 0.0
@@ -187,7 +188,7 @@ def simulate_year(d: Design, robots: int, pl: Plantation = Plantation(), ops: Op
                 charge[r] -= e
                 run_h[r] += dt / 3600
                 res.energy_kwh += e / 1000
-                res.climb_hours += 2 * tree.height / d.speed / 3600
+                res.climb_hours += (d.climb_time(tree) + d.descend_time(tree)) / 3600
                 res.harvests += 1
                 res.bunches += len(peds)
                 res.lateness.append(max(0.0, day - dd))
@@ -248,7 +249,7 @@ def _year(args) -> YearResult:
     return simulate_year(d, n, pl, ops, weather, seed=seed)
 
 
-def annual_capacity_per_robot(d: Design, pl: Plantation, ops: Ops, weather: Weather, seed: int = 99) -> float:
+def annual_capacity_per_robot(d, pl: Plantation, ops: Ops, weather: Weather, seed: int = 99) -> float:
     """Harvests one robot completes in a year when it never runs out of due palms."""
     overloaded = Plantation(hectares=30, palms_per_ha=pl.palms_per_ha, spacing_m=pl.spacing_m,
                             cycle_days=pl.cycle_days, early_days=pl.cycle_days, workdays=pl.workdays,
@@ -256,7 +257,7 @@ def annual_capacity_per_robot(d: Design, pl: Plantation, ops: Ops, weather: Weat
     return simulate_year(d, 1, overloaded, ops, weather, seed=seed).harvests
 
 
-def fleet_needed(d: Design, pl: Plantation = Plantation(), ops: Ops = Ops(), weather: Weather = Weather(),
+def fleet_needed(d, pl: Plantation = Plantation(), ops: Ops = Ops(), weather: Weather = Weather(),
                  service: ServiceLevel = ServiceLevel(), years: int = 30, max_robots: int = 400) -> FleetSize:
     """Smallest fleet meeting ``service`` over ``years`` simulated weather years.
 

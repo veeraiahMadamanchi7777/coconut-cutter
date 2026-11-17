@@ -225,3 +225,253 @@ def markdown(d: Design, fleet: FleetSize, pl: Plantation = Plantation(), ops: Op
     w("4. Validate the safety functions on hardware (ISO 13849-2) and check the radio link range under the canopy.")
     w("5. Run a pilot block (≈ 1,000 palms for two rounds) to calibrate the mounting and aiming times in the fleet model.\n")
     return "\n".join(L)
+
+
+# =========================================================================
+# Reimagined concept (inchworm) — drawing and the combined report
+# =========================================================================
+from .inchworm import InchwormDesign  # noqa: E402
+from .inchworm_control import run_mission as iw_mission  # noqa: E402
+
+
+def _collar(o: List[str], x0: float, y: float, trunk_w: float, lever_px: float, h_px: float,
+            released: bool = False) -> None:
+    """Side view of one collar: V-pad (right), strap (left), cantilever arm to the right."""
+    tilt = 0 if released else 6
+    o.append(f'<g transform="rotate({tilt} {x0 + trunk_w / 2} {y})">')
+    o.append(f'<rect class="pad" x="{x0 + trunk_w / 2 - 2}" y="{y}" width="10" height="{h_px * 0.55}" rx="2"/>')
+    o.append(f'<line class="strap" x1="{x0 - trunk_w / 2}" y1="{y - h_px * 0.45}" '
+             f'x2="{x0 + trunk_w / 2 + 6}" y2="{y + h_px * 0.15}"/>')
+    o.append(f'<rect class="m" x="{x0 + trunk_w / 2 + 6}" y="{y - 4}" width="{lever_px}" height="8" rx="2"/>')
+    o.append("</g>")
+
+
+def svg_inchworm(d: InchwormDesign) -> str:
+    W, H = 1010, 660
+    o: List[str] = [
+        f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {W} {H}" width="{W}" height="{H}" '
+        'font-family="Helvetica,Arial,sans-serif" font-size="11">',
+        '<style>.tr{fill:#b89b72;stroke:#6b5235}.m{fill:#c9d3dc;stroke:#2b3a48;stroke-width:1.2}'
+        '.pad{fill:#3a4652}.strap{stroke:#d08a1e;stroke-width:4}.cyl{fill:#7d8b99;stroke:#2b3a48}'
+        '.s{fill:#c0392b;stroke:#7b1e14}.g{fill:#7fb55a;stroke:#3d6b25}.d{stroke:#b5402a;stroke-width:.8;fill:none}'
+        '.t{fill:#1b2733}.dt{fill:#b5402a}.lf{fill:none;stroke:#4f8a3a;stroke-width:3}'
+        '.c{stroke:#888;stroke-dasharray:6 3 1 3}.h{font-weight:bold}</style>',
+        f'<rect width="{W}" height="{H}" fill="#fbfbf8"/>',
+        '<text x="14" y="22" class="t" font-size="13" font-weight="bold">Reimagined: inchworm climber with '
+        'self-locking collars. Side view (left), climbing gait (right). Schematic.</text>',
+    ]
+    s = 0.40  # px/mm
+    ax, top, base = 330.0, 60.0, 560.0
+    tw = 300 * s
+    o.append(f'<rect class="tr" x="{ax - tw / 2}" y="{top}" width="{tw}" height="{base - top}"/>')
+    for k in range(15):
+        y = top + 15 + k * 32
+        o.append(f'<line x1="{ax - tw / 2}" y1="{y}" x2="{ax + tw / 2}" y2="{y + 3}" stroke="#8a6f4c"/>')
+    for dx, dy in ((-120, 10), (-60, -15), (60, -15), (120, 10)):
+        o.append(f'<path class="lf" d="M{ax} {top + 15} Q{ax + dx * 0.6} {top - 20 + dy} {ax + dx * 1.3} {top + 35 + dy}"/>')
+    lever = (d.lever * 1000 - 150) * s
+    hp = d.pad_span * 1000 * s
+    y_up = 250.0
+    y_lo = y_up + d.stroke * s * 0.9 + 40
+    tip = ax + tw / 2 + 6 + lever
+    _collar(o, ax, y_up, tw, lever, hp)
+    _collar(o, ax, y_lo, tw, lever, hp)
+    # cylinder between arm tips
+    o.append(f'<rect class="cyl" x="{tip - 9}" y="{y_up + 6}" width="18" height="{(y_lo - y_up) * 0.55}" rx="3"/>')
+    o.append(f'<rect class="m" x="{tip - 4}" y="{y_up + 6 + (y_lo - y_up) * 0.55}" width="8" '
+             f'height="{(y_lo - y_up) * 0.45 - 10}"/>')
+    # battery box hanging at lower arm tip (counterweight)
+    o.append(f'<rect class="m" x="{tip - 22}" y="{y_lo + 10}" width="44" height="48" rx="3"/>')
+    o.append(f'<text class="t" x="{tip - 22}" y="{y_lo + 72}">battery {d.battery_ah} Ah (counterweight)</text>')
+    # tensioner on upper strap
+    o.append(f'<rect class="m" x="{ax - tw / 2 - 26}" y="{y_up - hp * 0.5 - 10}" width="22" height="16" rx="2"/>')
+    o.append(f'<text class="t" text-anchor="end" x="{ax - tw / 2 - 30}" y="{y_up - hp * 0.5 + 2}">harvest tensioner</text>')
+    # slewing mast, boom, saw
+    o.append(f'<rect class="m" x="{ax + tw / 2 + 14}" y="{y_up - 120}" width="9" height="116"/>')
+    bx = ax - d.reach * 1000 * s * 0.55
+    o.append(f'<line x1="{ax + tw / 2 + 18}" y1="{y_up - 115}" x2="{bx}" y2="{y_up - 145}" stroke="#2b3a48" stroke-width="5"/>')
+    br = d.blade / 2 * s * 0.6
+    o.append(f'<circle class="s" cx="{bx}" cy="{y_up - 145 - br}" r="{br}"/>')
+    o.append(f'<circle cx="{bx}" cy="{y_up - 145 - br}" r="3" fill="#222"/>')
+    for dx, dy in ((0, 0), (14, 6), (-12, 8), (4, 18), (18, 22), (-6, 26)):
+        o.append(f'<circle class="g" cx="{bx - 30 + dx}" cy="{y_up - 95 + dy}" r="8"/>')
+    o.append(f'<text class="t" text-anchor="end" x="{bx - br - 6}" y="{y_up - 145 - br + 4}">Ø{d.blade} saw</text>')
+    # labels & dims
+    o.append(f'<text class="t" x="{tip + 16}" y="{y_up - 8}">upper collar</text>')
+    o.append(f'<text class="t" x="{tip + 16}" y="{y_lo - 8}">lower collar</text>')
+    o.append(f'<text class="t" x="{tip + 16}" y="{(y_up + y_lo) / 2 + 4}">{d.cylinder[0]} cylinder, {d.stroke} stroke</text>')
+    o.append(f'<line class="d" x1="{ax}" y1="{y_lo + 80}" x2="{tip}" y2="{y_lo + 80}"/>')
+    o.append(f'<text class="dt" x="{ax + 4}" y="{y_lo + 92}">lever L = {d.lever * 1000:.0f} mm from trunk axis</text>')
+    o.append(f'<text class="dt" x="{ax - tw / 2}" y="{base + 18}">grip rule: lever L ≥ h / (2μ), so grip grows with load</text>')
+    o.append(f'<line class="c" x1="{ax}" y1="{top}" x2="{ax}" y2="{base}"/>')
+
+    # ---- gait strip
+    gx0, gy = 655.0, 110.0
+    o.append(f'<text class="t h" x="{gx0}" y="{gy - 40}">One climbing step ({d.step_length * 1000:.0f} mm)</text>')
+    # (label, upper free, lower free, upper height px, lower height px)
+    frames = [("1  release upper", True, False, 70, 0), ("2  extend: upper rises", True, False, 130, 0),
+              ("3  lock upper, release lower", False, True, 130, 0), ("4  retract: lower rises", False, True, 130, 60)]
+    for k, (label, ru, rl, hu, hl) in enumerate(frames):
+        x = gx0 + k * 88
+        o.append(f'<rect class="tr" x="{x}" y="{gy}" width="26" height="420"/>')
+        y_l = gy + 400 - hl
+        y_u = gy + 400 - hu
+        for yy, rel in ((y_u, ru), (y_l, rl)):
+            colour = "#d08a1e" if not rel else "#bbb"
+            o.append(f'<line x1="{x - 3}" y1="{yy - 8}" x2="{x + 29}" y2="{yy + 4}" stroke="{colour}" stroke-width="4"/>')
+            o.append(f'<rect class="m" x="{x + 26}" y="{yy - 3}" width="32" height="6"/>')
+            o.append(f'<text class="t" x="{x + 28}" y="{yy - 7}" font-size="8">{"free" if rel else "locked"}</text>')
+        o.append(f'<line x1="{x + 54}" y1="{y_u}" x2="{x + 54}" y2="{y_l}" stroke="#2b3a48" stroke-width="5"/>')
+        o.append(f'<text class="t" x="{x - 2}" y="{gy + 440}" font-size="10">{label.split("  ")[0]}</text>')
+    for k, (label, *_r) in enumerate(frames):
+        o.append(f'<text class="t" x="{gx0}" y="{gy + 465 + 14 * k}" font-size="11">{label}</text>')
+    o.append("</svg>")
+    return "\n".join(o)
+
+
+def markdown_full(iw: InchwormDesign, wd: Design, iw_fleet: FleetSize, wd_fleet: FleetSize, sens,
+                  pl: Plantation = Plantation(), ops: Ops = Ops(), missions: int = 300, seed: int = 7) -> str:
+    rng = random.Random(seed)
+    res = []
+    for k in range(missions):
+        t = iw.pop.sample(rng)
+        res.append(iw_mission(iw, t, iw.pop.bunches(rng, pl.cycle_days), wet=k % 2 == 1, rng=rng))
+    ok = [r for r in res if r.ok]
+    yi, yw = iw_fleet.results[0], wd_fleet.results[0]
+    L: List[str] = []
+    w = L.append
+    w("# Coconut-Palm Harvesting Robot: Reimagined Design\n")
+    w("> Generated by `coconut-harvester report` from the models in `coconut_harvester/`. Change an assumption, "
+      "regenerate, and CI re-verifies everything.\n")
+    w("![Inchworm robot](robot.svg)\n")
+    w("## 1. Why reimagine\n")
+    w("The first design (the *wheel ring*, appendix A) clamps six driven wheels onto the trunk and climbs on "
+      "friction. Its own numbers exposed three structural problems:\n")
+    w(f"1. **Weight:** {wd.mass:.1f} kg, right at the {wd.req.max_mass:g} kg two-person limit. Six gearmotors "
+      f"weigh {wd.mass_breakdown['drive gearmotors']:.1f} kg, and they must be large to push the clamped wheels "
+      "over leaf-scar ridges.")
+    w(f"2. **Monsoon:** friction-only grip means no climbing on wet bark. That cost {yw.lost_wet_hours:,.0f} "
+      f"robot-hours a year, and it is why the estate needed {wd_fleet.robots} robots.")
+    w(f"3. **Mounting:** closing a hinged ring with six spring arms takes about {wd.mount_s:.0f} s per tree, "
+      "more than the climb itself.\n")
+    w("## 2. The new concept: an inchworm with self-locking collars\n")
+    w("Each **collar** is a rubber V-pad on one side of the trunk and a steel-cored strap around the other, with "
+      "a cantilever arm on the pad side. Weight on the arm *cocks* the collar, so pad and strap bite a height "
+      "*h* apart. The normal force is N = M/h, where M is the load's moment about the trunk. **Grip grows with "
+      "load.** The collar holds whenever the lever L ≥ h/(2μ), however heavy the robot is. Hunters' climbing tree "
+      "stands rely on the same principle on wet trunks.\n")
+    w("Two collars are joined by one electric cylinder. The robot climbs in four moves:")
+    w("1. Release the upper collar.")
+    w("2. Extend: the upper collar rises.")
+    w("3. Lock the upper collar and release the lower one.")
+    w("4. Retract: the lower collar rises.\n")
+    w("**Fail-safe:** the release servos are spring-return, so if power is lost both collars lock where they "
+      "are. Leaf-scar ridges stop mattering, because a released collar has slack and slides over them.\n")
+    w("**Found by the physics model:** with the saw swung to the far side of the trunk, the cocking moment nearly "
+      f"cancels (lock ratio {iw.lock_ratio(iw.pop.mu_dry.lo * iw.pop.wet_factor, -iw.reach):.2f}×), and a pure "
+      "self-locking collar would let go mid-cut. So the upper collar also has a small **harvest tensioner**: a "
+      f"self-locking lead screw on the strap ({iw.tensioner[0]} N). It clamps positively before the arm may "
+      "deploy and slackens only once the arm is stowed again.\n")
+    w("## 3. Head-to-head\n")
+    w("Same tree population, same plantation, same weather years, same service level.\n")
+    w("| | Wheel ring (v1) | **Inchworm (v2)** |\n|---|---|---|")
+    w(f"| Mass | {wd.mass:.1f} kg | **{iw.mass:.1f} kg** |")
+    w(f"| Motors | 6 drive + 2 clamp | 1 cylinder + 2 release servos + 1 tensioner |")
+    w(f"| Climbs on wet bark | no | **yes** (lock margin {iw.lock_margin_wet:.2f}× at the wettest, slipperiest bark) |")
+    w(f"| Climb speed | {wd.speed:.2f} m/s | {iw.speed:.2f} m/s |")
+    w(f"| Mount / dismount | {wd.mount_s:.0f} s / {wd.dismount_s:.0f} s | {iw.mount_s:.0f} s / {iw.dismount_s:.0f} s |")
+    w(f"| Sensitive to leaf-scar ridges | yes (sizes the clamp & motors) | no |")
+    tpc = {id(d): next(c.value for c in d.checks if c.name.startswith("Trees per battery")) for d in (wd, iw)}
+    w(f"| Battery / trees per charge (mean tree) | {wd.battery_ah} Ah / {tpc[id(wd)]:.0f} | "
+      f"{iw.battery_ah} Ah / {tpc[id(iw)]:.0f} |")
+    w(f"| Trees per robot per 7 productive h | {yw.trees_per_robot_day:.0f} | {yi.trees_per_robot_day:.0f} |")
+    w(f"| Robot-hours lost to wet weather / yr | {yw.lost_wet_hours:,.0f} | {yi.lost_wet_hours:,.0f} |")
+    w(f"| **Robots for {pl.palms:,} palms** | {wd_fleet.robots} | **{iw_fleet.robots}** |")
+    w(f"| Crew | {2 * wd_fleet.robots} | **{2 * iw_fleet.robots}** |")
+    w(f"| Years meeting the round (of {len(iw_fleet.results)}) | {round(wd_fleet.pass_frac * len(wd_fleet.results))} | "
+      f"{round(iw_fleet.pass_frac * len(iw_fleet.results))} |")
+    w(f"| Fleet energy / yr | {yw.energy_kwh:,.0f} kWh | {yi.energy_kwh:,.0f} kWh |")
+    w("\nPer tree the two are about equal: the inchworm climbs more slowly but mounts faster. **All of the fleet "
+      "saving comes from working through the monsoon.** The sensitivity study below makes that explicit.\n")
+    w("## 4. How sure is the 7?\n")
+    w("Fleet size for the inchworm under pessimistic versions of its key assumptions (each sized to the same "
+      "service level over 30 weather years):\n")
+    w("| Scenario | Mass | Robots |\n|---|---|---|")
+    for r in sens:
+        m = f"{r.mass:.1f} kg" if r.mass else "–"
+        n = str(r.robots) if r.robots else "–"
+        note = f" ({r.note})" if r.note else ""
+        w(f"| {r.label}{note} | {m} | {n} |")
+    w("\nEven if rainy days turn out to be mostly unworkable, the inchworm needs fewer robots. If it is "
+      "grounded on wet bark just like the wheel ring, it needs the same number, because the advantage *is* "
+      "wet-weather operation. Wet-bark self-lock and workable rain hours are therefore the two things to "
+      "measure first (section 9).\n")
+    w("## 5. Sized design\n")
+    w("| Item | Result |\n|---|---|")
+    w(f"| Mass | **{iw.mass:.1f} kg**: one person can lift it; two mount it |")
+    w(f"| Collars | Lever {iw.lever * 1000:.0f} mm, pad-to-strap bite {iw.pad_span * 1000:.0f} mm, "
+      f"{iw.tube[0]}×{iw.tube[0]}×{iw.tube[1]:g} 6061-T6 arms, steel-cored strap, 600 mm constant-force take-up reel |")
+    w(f"| Cylinder | {iw.cylinder[0]}: {iw.cylinder[1]} N, BLDC ball screw, spring brake, {iw.stroke} mm stroke |")
+    w(f"| Step / speed | {iw.step_length * 1000:.0f} mm per step; {iw.speed:.2f} m/s up, {iw.descend_speed:.2f} m/s down |")
+    w(f"| Harvest tensioner | {iw.tensioner[0]} N self-locking lead screw, clamps {iw.N_active:.0f} N |")
+    w(f"| Saw | Ø{iw.blade} mm TCT, {iw.saw_w:.0f} W BLDC, reach {iw.reach * 1000:.0f} mm, 360° slew |")
+    w(f"| Battery | 24 V {iw.battery_ah} Ah ({iw.battery_wh:.0f} Wh), hung at the lower arm tip as counterweight |")
+    w("\n| Subsystem | kg |\n|---|---|")
+    for k, v in iw.mass_breakdown.items():
+        w(f"| {k} | {v:.2f} |")
+    w("\n## 6. Engineering checks\n")
+    w("| Check | Value | Limit | Status |\n|---|---|---|---|")
+    for c in iw.checks:
+        w(f"| {c.name} | {c.value:.2f} {c.unit} | {c.cmp} {c.limit:g} | {'PASS' if c.ok else '**FAIL**'} |")
+    w("\n## 7. Closed loop\n")
+    w(f"{missions} full missions on random palms, half of them on **wet bark**, run the real controller "
+      "against a physics plant (servo lag, cylinder speed under load, self-lock with the actual friction):\n")
+    w("| Metric | Value |\n|---|---|")
+    w(f"| Completed with no faults, no falls | {len(ok)}/{missions} |")
+    w(f"| Mission time mean / max | {fmean(r.time_s for r in ok):.0f} s / {max(r.time_s for r in ok):.0f} s |")
+    w(f"| Energy per tree mean / max | {fmean(r.energy_wh for r in ok):.1f} / {max(r.energy_wh for r in ok):.1f} Wh |")
+    w(f"| Inchworm steps per mission (mean) | {fmean(r.steps for r in ok):.0f} |")
+    w("\nThe test suite also injects sap patches (sudden friction loss, so the robot slips, faults and holds), "
+      "radio loss mid-step (both collars lock and the robot does not move), and low battery (it comes home with "
+      "charge to spare).\n")
+    w("## 8. Safety functions\n")
+    w("Controller: `coconut_harvester/inchworm_control.py`.\n")
+    w("- **IW1:** both collars are never released in the air. A collar is released only while the other "
+      "reports locked and the cylinder is braked.")
+    w("- **IW2:** the cylinder moves only with exactly one collar free, the other locked, the arm stowed, the "
+      "tensioner slack, the link up and tilt in limits.")
+    w("- **IW3:** the saw runs only when all of these hold: arm deployed, tensioner tight, both collars locked, "
+      "cylinder braked, drop zone clear, link up, dead-man held, wind ≤ "
+      f"{iw.req.wind_max:g} m/s.")
+    w("- **IW4:** the harvest tensioner never slackens while the arm is out. This is enforced on every output.")
+    w("- **IW5:** e-stop or link loss brakes the cylinder and drops both release servos, so both collars lock.")
+    w("- **IW6:** if a collar that should be locked moves (slip), the robot brakes, locks and faults.")
+    w("- **IW7:** no climbing at the crown, in high wind, or without twice the energy needed to descend. A low "
+      "battery forces a descent.")
+    w("- **IW8:** hold-to-run. Releasing CLIMB or DESCEND brakes and re-locks immediately.")
+    w("- **IW9:** the straps open only on the ground.\n")
+    w("Verification:\n")
+    w("- **Fuzzing:** every rule is checked on every scan under random input streams and under full harvest "
+      "scripts with injected faults. Half the injections are aimed at the short harvest segment.")
+    w("- **Mutation testing:** of 13 single-rule deletions, 12 are caught. The 13th (\"arm stowed to move\") is "
+      "an equivalent mutant: an arm that is out latches the tensioner, and a latched tensioner already blocks "
+      "motion.")
+    w("- **Bug found:** the fuzz caught a real one during development. A brake-and-relock path slackened the "
+      "tensioner while the arm was out. IW4 is now enforced by construction.\n")
+    w("## 9. Before building\n")
+    w("1. **Wet-bark self-lock rig:** cock a collar on 10+ real trunks, wet and dry. Measure slip load against "
+      "lever and confirm μ_wet. The whole fleet advantage rests on this.")
+    w("2. **Rain logging on a pilot block:** measure what share of rainy days is actually workable (lightning, "
+      "downpours, crew).")
+    w("3. Palm survey (`TreePopulation.from_survey`) and stalk cutting energy, as for v1.")
+    w("4. Prototype tests: 2,000-step endurance of the collars and cylinder (watch strap and pad wear), the "
+      "tensioner under saw vibration, a belay drop test, and ISO 13849-2 validation.\n")
+    w("---\n")
+    w("## Appendix A: wheel-ring concept (v1)\n")
+    w(f"Kept in `coconut_harvester/design.py` and `controller.py`, and still fully tested, so the comparison "
+      f"stays honest. Drawing: [wheel_robot.svg](wheel_robot.svg). Mass {wd.mass:.1f} kg, {wd.speed:.2f} m/s, "
+      f"clamp preload {wd.N0:.0f} N per wheel, {wd_fleet.robots} robots for this estate.\n")
+    w("| Check | Value | Limit | Status |\n|---|---|---|---|")
+    for c in wd.checks:
+        w(f"| {c.name} | {c.value:.2f} {c.unit} | {c.cmp} {c.limit:g} | {'PASS' if c.ok else '**FAIL**'} |")
+    return "\n".join(L)

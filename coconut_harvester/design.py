@@ -105,6 +105,11 @@ class Design:
     checks: List[Check] = field(default_factory=list)
     converged: bool = False
 
+    concept = "Wheel ring (friction clamp)"
+    climbs_wet = False
+    mount_s = 100.0     # lift onto trunk, close & latch hinged ring with 6 wheel arms
+    dismount_s = 45.0
+
     # ---- derived ---------------------------------------------------------
     @property
     def ok(self) -> bool:
@@ -188,6 +193,16 @@ class Design:
         t = 2 * tree.height / self.speed + dwell_s
         e += self.req.electronics_w * t / 3600.0
         return e
+
+    def climb_time(self, tree: Tree) -> float:
+        return tree.height / self.speed * 1.08 + 3.0  # ridge slow-downs + clamp
+
+    def descend_time(self, tree: Tree) -> float:
+        return tree.height / self.speed * 1.08 + 3.0
+
+    def energy_base(self, tree: Tree) -> float:
+        """energy_tree with no bunches and no dwell (fleet fast path)."""
+        return self.energy_tree(tree, [], 0.0)
 
     def descent_reserve(self, height: float) -> float:
         return self.req.descent_reserve_sf * (self.energy_descend(height)

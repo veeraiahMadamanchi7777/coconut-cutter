@@ -10,7 +10,7 @@ import math
 import random
 from dataclasses import dataclass, field
 from statistics import fmean, pstdev
-from typing import Iterable, List, Sequence
+from typing import Iterable, List, Sequence, Tuple
 
 
 @dataclass(frozen=True)
@@ -146,8 +146,16 @@ class Weather:
     rain_prob: Sequence[float] = tuple(RAIN_PROB)
     wet_day_dry_hours: float = 3.0   # productive hours left on a wet day (afternoon dry-out)
 
-    def productive_hours(self, day_of_year: int, shift_h: float, rng: random.Random) -> float:
+    wet_ok_fraction: Tuple[float, float] = (0.5, 0.9)  # share of a wet day still workable if wet bark is OK
+                                                       # (stops only for downpours / lightning)
+
+    def productive_hours(self, day_of_year: int, shift_h: float, rng: random.Random,
+                         wet_bark_ok: bool = False) -> float:
         month = min(11, int(day_of_year / 365.0 * 12))
         if rng.random() < self.rain_prob[month]:
-            return min(shift_h, self.wet_day_dry_hours * rng.random())
+            u = rng.random()
+            if wet_bark_ok:
+                lo, hi = self.wet_ok_fraction
+                return shift_h * (lo + (hi - lo) * u)
+            return min(shift_h, self.wet_day_dry_hours * u)
         return shift_h

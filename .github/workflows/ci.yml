@@ -23,6 +23,7 @@ jobs:
           coconut-harvester report --out /tmp/docs
           diff -u docs/DESIGN.md /tmp/docs/DESIGN.md
           diff -u docs/robot.svg /tmp/docs/robot.svg
+          diff -u docs/wheel_robot.svg /tmp/docs/wheel_robot.svg
   soak:
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest

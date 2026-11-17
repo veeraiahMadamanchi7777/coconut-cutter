@@ -44,3 +44,30 @@ def test_1000_hectare_estate(design, fleet):
 @pytest.mark.prodscale
 def test_20000_closed_loop_missions(design):
     _missions(design, 20_000, seed=77)
+
+
+def test_inchworm_reference_estate_out_of_sample_years(iw, iw_fleet, plantation):
+    years = [simulate_year(iw, iw_fleet.robots, plantation, seed=2000 + s) for s in range(10)]
+    assert sum(iw_fleet.service.year_ok(y) for y in years) >= 8
+    assert all(y.max_late <= iw_fleet.service.hard_max_late for y in years)
+
+
+@pytest.mark.prodscale
+def test_inchworm_1000_hectare_estate(iw, iw_fleet):
+    big = Plantation(hectares=1000)
+    robots = iw_fleet.robots * 10
+    y = simulate_year(iw, robots, big, seed=8)
+    print(f"\ninchworm 1000 ha: {robots} robots, {y.harvests:,} harvests, P95 late {y.p95_late:.1f} d, "
+          f"max {y.max_late:.0f} d")
+    assert y.harvests >= big.palms * (365 / big.cycle_days - 1.5)
+    assert y.max_late <= iw_fleet.service.hard_max_late
+
+
+@pytest.mark.prodscale
+def test_inchworm_5000_closed_loop_missions_wet_and_dry(iw):
+    from coconut_harvester.inchworm_control import run_mission as iw_run
+    rng = random.Random(55)
+    for n in range(5000):
+        t = iw.pop.sample(rng)
+        r = iw_run(iw, t, iw.pop.bunches(rng, 45), wet=n % 2 == 1, rng=rng)
+        assert r.ok and not r.fell, (t, r)
