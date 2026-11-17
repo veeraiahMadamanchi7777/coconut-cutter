@@ -1,0 +1,338 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Why the Arm Sticks Out</title>
+<style>
+  html, body { margin: 0; background: #10161a; }
+  canvas { display: block; width: 100vw; max-width: 1280px; height: auto; margin: 0 auto; }
+</style>
+<canvas id="c" width="1280" height="720"></canvas>
+<script>
+// Explainer: why each collar's arm sticks out while the robot climbs.
+// Deterministic: draw(t) renders the frame at time t (s). Numbers come from the sized design
+// (coconut_harvester/inchworm.py): 19.0 kg robot, pad-to-strap bite h = 100 mm, wet bark μ = 0.30,
+// weight acts 267 mm from the trunk axis with the saw parked (arm tip at 350 mm).
+const P = { W: 186.4, h: 0.10, muWet: 0.30, Leff: 0.2667, Larm: 0.35, R: 0.155,
+            Mstow: 49.7, Mfar: -17.5, Nact: 684, xStow: 0.20, xFar: -0.70 };
+const C = { bg: "#10161a", panel: "#18222a", ink: "#eef3f1", muted: "#93a39c", line: "#2a3740",
+            bark: "#8c7354", barkDark: "#5f4c35", strap: "#e9a046", free: "#8d9592", metal: "#c3ccd3",
+            weight: "#ef6a5b", normal: "#62b3ef", fric: "#74d39b", saw: "#e0473c", ok: "#74d39b", bad: "#ef6a5b" };
+const FONT = '"Inter", "Helvetica Neue", Arial, sans-serif';
+const cv = document.getElementById("c"), g = cv.getContext("2d");
+const ratioOf = (mu, M, extraN = 0) => Math.max(0, 2 * mu * (extraN + M / P.h)) / P.W;
+
+// ----------------------------------------------------------------- helpers
+const clamp = (x, a = 0, b = 1) => Math.max(a, Math.min(b, x));
+const ease = t => { t = clamp(t); return t < .5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2; };
+const lerp = (a, b, t) => a + (b - a) * t;
+function text(s, x, y, size = 24, color = C.ink, weight = 500, align = "left", alpha = 1) {
+  g.save(); g.globalAlpha = alpha; g.fillStyle = color; g.font = `${weight} ${size}px ${FONT}`; g.textAlign = align;
+  g.textBaseline = "alphabetic"; g.fillText(s, x, y); g.restore();
+}
+function wrap(s, x, y, maxW, size, color = C.ink, weight = 500, lh = 1.35, alpha = 1, align = "left") {
+  g.save(); g.font = `${weight} ${size}px ${FONT}`;
+  const words = s.split(" "); let line = "", yy = y;
+  for (const w of words) {
+    const test = line ? line + " " + w : w;
+    if (g.measureText(test).width > maxW && line) { text(line, x, yy, size, color, weight, align, alpha); line = w; yy += size * lh; }
+    else line = test;
+  }
+  if (line) text(line, x, yy, size, color, weight, align, alpha);
+  g.restore(); return yy;
+}
+function arrow(x1, y1, x2, y2, color, w = 4, alpha = 1) {
+  const L = Math.hypot(x2 - x1, y2 - y1); if (L < 2) return;
+  const a = Math.atan2(y2 - y1, x2 - x1), hs = Math.min(16, L * 0.45);
+  g.save(); g.globalAlpha = alpha; g.strokeStyle = g.fillStyle = color; g.lineWidth = w; g.lineCap = "round";
+  g.beginPath(); g.moveTo(x1, y1); g.lineTo(x2 - Math.cos(a) * hs * 0.6, y2 - Math.sin(a) * hs * 0.6); g.stroke();
+  g.beginPath(); g.moveTo(x2, y2); g.lineTo(x2 - hs * Math.cos(a - 0.45), y2 - hs * Math.sin(a - 0.45));
+  g.lineTo(x2 - hs * Math.cos(a + 0.45), y2 - hs * Math.sin(a + 0.45)); g.closePath(); g.fill(); g.restore();
+}
+function rrect(x, y, w, h, r, fill, stroke) {
+  g.beginPath(); g.moveTo(x + r, y); g.arcTo(x + w, y, x + w, y + h, r); g.arcTo(x + w, y + h, x, y + h, r);
+  g.arcTo(x, y + h, x, y, r); g.arcTo(x, y, x + w, y, r); g.closePath();
+  if (fill) { g.fillStyle = fill; g.fill(); } if (stroke) { g.strokeStyle = stroke; g.lineWidth = 1.5; g.stroke(); }
+}
+function trunk(cx, top, bottom, halfW, scroll = 0) {
+  g.fillStyle = C.bark; g.fillRect(cx - halfW, top, halfW * 2, bottom - top);
+  g.save(); g.beginPath(); g.rect(cx - halfW, top, halfW * 2, bottom - top); g.clip();
+  g.strokeStyle = C.barkDark; g.lineWidth = 3;
+  const gap = 26, off = ((scroll % gap) + gap) % gap;
+  for (let y = top - gap + off; y < bottom + gap; y += gap) { g.beginPath(); g.moveTo(cx - halfW, y); g.lineTo(cx + halfW, y + 4); g.stroke(); }
+  g.restore();
+}
+// side view of a collar. cx: trunk axis, y: collar centre, s: px per m, L: arm length (m),
+// tilt: cock angle (rad, + = arm tip down), locked: strap colour.
+function collar(cx, y, s, halfW, L, tilt, locked, opts = {}) {
+  const h = P.h * s;
+  g.save(); g.translate(cx, y); g.rotate(tilt);
+  // strap: from far side (left) wrapping to pad side
+  g.strokeStyle = locked ? C.strap : C.free; g.lineWidth = 7; g.lineCap = "round";
+  g.beginPath(); g.moveTo(-halfW - 4, -h / 2); g.lineTo(halfW + 6, -h * 0.05); g.stroke();
+  g.globalAlpha = 0.35; g.beginPath(); g.moveTo(-halfW - 4, -h / 2); g.lineTo(halfW + 6, h * 0.1); g.stroke(); g.globalAlpha = 1;
+  // V-pad
+  rrect(halfW, -h * 0.1, 14, h * 0.62, 3, "#262d2b");
+  rrect(halfW + 12, -h * 0.25, 12, h * 0.8, 2, "#3e4a52");
+  // arm
+  if (L > 0.001) {
+    const xEnd = L * s;
+    rrect(halfW + 20, -7, Math.max(0, xEnd - halfW - 20), 14, 4, C.metal);
+    rrect(xEnd - 10, -16, 22, 32, 4, C.metal);
+  }
+  g.restore();
+}
+function rotPt(cx, cy, x, y, a) { return [cx + x * Math.cos(a) - y * Math.sin(a), cy + x * Math.sin(a) + y * Math.cos(a)]; }
+function caption(s, alpha = 1) {
+  g.save(); g.globalAlpha = alpha * 0.92; rrect(40, 600, 1200, 96, 14, "rgba(10,14,17,0.85)"); g.restore();
+  wrap(s, 70, 640, 1140, 27, C.ink, 500, 1.3, alpha);
+}
+function gauge(x, y, w, ratio, label, alpha = 1) {
+  const max = 2.5, px = r => x + clamp(r / max) * w;
+  g.save(); g.globalAlpha = alpha;
+  rrect(x, y, w, 22, 11, "#22303a");
+  const ok = ratio >= 1;
+  rrect(x, y, Math.max(22, px(ratio) - x), 22, 11, ok ? C.ok : C.bad);
+  g.strokeStyle = C.ink; g.lineWidth = 2;
+  for (const [r, t, al, dx] of [[1, "slip ← 1.0", "right", 4], [1.5, "1.5 target", "left", -4]]) {
+    g.beginPath(); g.moveTo(px(r), y - 6); g.lineTo(px(r), y + 28); g.stroke();
+    text(t, px(r) - dx, y + 46, 15, C.muted, 500, al);
+  }
+  text(label, x, y - 14, 17, C.muted, 600);
+  text(ratio.toFixed(2) + "×", x + w + 16, y + 19, 26, ok ? C.ok : C.bad, 700);
+  g.restore();
+}
+function readout(x, y, rows, alpha = 1) {
+  g.save(); g.globalAlpha = alpha;
+  rrect(x, y, 440, 40 + rows.length * 38, 14, C.panel, C.line);
+  rows.forEach(([k, v, col], i) => {
+    text(k, x + 22, y + 46 + i * 38, 20, C.muted, 500);
+    text(v, x + 418, y + 46 + i * 38, 22, col || C.ink, 700, "right");
+  });
+  g.restore();
+}
+function status(x, y, slipping, alpha = 1) {
+  g.save(); g.globalAlpha = alpha;
+  rrect(x, y, 190, 46, 23, slipping ? C.bad : C.ok);
+  text(slipping ? "SLIPPING" : "LOCKED", x + 95, y + 31, 22, "#0d1418", 800, "center");
+  g.restore();
+}
+
+// ------------------------------------------------------------------ scenes
+// Each scene: [duration, fn(localTime, duration)]
+const scenes = [];
+const add = (d, f) => scenes.push({ d, f });
+
+// 0. title
+add(4.5, (t) => {
+  const a = clamp(t / 0.8);
+  text("Why the arm sticks out", 640, 300, 64, C.ink, 800, "center", a);
+  text("while the robot climbs", 640, 372, 44, C.strap, 600, "center", a);
+  text("Inchworm palm robot · 19.0 kg · wet bark μ = 0.30", 640, 450, 24, C.muted, 500, "center", clamp((t - 0.6) / 0.8));
+});
+
+// 1. the question
+add(7, (t, d) => {
+  const s = 900, cx = 520, y = 380, hw = P.R * s * 0.55;
+  trunk(cx, 40, 590, hw);
+  collar(cx, y - 60, s * 0.55, hw, P.Larm * 0.55 * 1.0 * 900 / 495, 0.07, true);
+  collar(cx, y + 160, s * 0.55, hw, P.Larm * 0.55 * 900 / 495, 0.07, true);
+  // pulse ring on arms
+  const k = 0.5 + 0.5 * Math.sin(t * 4);
+  g.save(); g.strokeStyle = C.strap; g.globalAlpha = 0.35 + 0.4 * k; g.lineWidth = 3;
+  g.beginPath(); g.ellipse(cx + 170, y + 50, 140, 260, 0, 0, Math.PI * 2); g.stroke(); g.restore();
+  text("350 mm", cx + 260, y + 60, 26, C.strap, 700);
+  text("from trunk axis", cx + 260, y + 92, 20, C.muted, 500);
+  caption("Each collar has an arm sticking out 350 mm from the trunk. It does not reach anything. It is what makes the collar grip.", clamp((t - 0.8) / 0.8));
+});
+
+// 2. no arm: the collar just slides
+add(8, (t) => {
+  const s = 1100, cx = 430, hw = P.R * s * 0.5;
+  const slowmo = 0.06;                       // slow motion so the slide is visible
+  const tt = Math.max(0, t - 1.5);
+  const fall = 0.5 * 9.81 * Math.pow(tt * slowmo * 6, 2) * s * 0.18;   // free slide, ratio = 0
+  const y = 250 + Math.min(fall, 190);
+  trunk(cx, 40, 590, hw);
+  // centred load: plain ring, no tilt, hanging weight below
+  g.strokeStyle = C.free; g.lineWidth = 7; g.beginPath(); g.moveTo(cx - hw - 4, y); g.lineTo(cx + hw + 4, y); g.stroke();
+  g.strokeStyle = C.metal; g.lineWidth = 3; g.beginPath(); g.moveTo(cx, y); g.lineTo(cx, y + 70); g.stroke();
+  rrect(cx - 26, y + 70, 52, 44, 6, "#3e4a52");
+  arrow(cx, y + 118, cx, y + 190, C.weight, 5);
+  text("W", cx + 14, y + 180, 22, C.weight, 700);
+  readout(760, 120, [["Load lever L", "0 mm"], ["Moment M = W·L", "0 N·m"], ["Bite force N = M/h", "0 N"],
+                     ["Friction 2μN", "0 N", C.bad], ["Weight W", "186 N", C.weight]]);
+  status(760, 380, tt > 0);
+  text("slow motion", 760, 460, 18, C.muted, 500);
+  caption("No arm: the weight hangs on the trunk axis. Nothing tips the collar, so nothing presses it on the bark. It slides straight down.", clamp((t - 0.6) / 0.8));
+});
+
+// 3. grow the arm: physics decides when it locks
+add(16, (t, d) => {
+  const s = 1100, cx = 330, hw = P.R * s * 0.5;
+  const L = P.Leff * ease((t - 1.0) / 9.0);              // load lever grows 0 -> 267 mm
+  const ratio = ratioOf(P.muWet, P.W * L);
+  // integrate the slide up to now (deterministic): v' = g(1 - ratio) while ratio < 1
+  let y = 0, v = 0; const dt = 1 / 120;
+  for (let k = 0; k * dt < t; k++) {
+    const tk = k * dt, Lk = P.Leff * ease((tk - 1.0) / 9.0), rk = ratioOf(P.muWet, P.W * Lk);
+    if (rk < 1) { v += 9.81 * (1 - rk) * dt * 0.012; y += v * dt * s; } else v = 0;
+  }
+  const slipping = ratio < 1;
+  const yc = 210 + Math.min(y, 220);
+  const tilt = 0.02 + 0.07 * clamp(L / 0.12);
+  trunk(cx, 40, 590, hw, -yc * 0);
+  collar(cx, yc, s * 0.5, hw, Math.max(L, 0.001) * 1.02 + (L > 0 ? 0.06 : 0), tilt, true);
+  // weight at the lever
+  const [wx, wy] = rotPt(cx, yc, L * s * 0.5 + (L > 0 ? 30 : 0), 0, tilt);
+  g.strokeStyle = C.metal; g.lineWidth = 3; g.beginPath(); g.moveTo(wx, wy); g.lineTo(wx, wy + 40); g.stroke();
+  rrect(wx - 22, wy + 40, 44, 38, 6, "#3e4a52");
+  arrow(wx, wy + 82, wx, wy + 150, C.weight, 5); text("W", wx + 12, wy + 140, 22, C.weight, 700);
+  // bite points & forces
+  const h = P.h * s * 0.5, N = P.W * L / P.h;
+  const [px, py] = rotPt(cx, yc, hw + 2, h * 0.45, tilt), [sx, sy] = rotPt(cx, yc, -hw - 2, -h / 2, tilt);
+  const nLen = clamp(N / 600) * 110;
+  if (N > 1) {
+    arrow(px + nLen + 8, py, px + 8, py, C.normal, 5); arrow(sx - nLen - 8, sy, sx - 8, sy, C.normal, 5);
+    text("N", px + nLen + 14, py + 8, 22, C.normal, 700); text("N", sx - nLen - 34, sy + 8, 22, C.normal, 700);
+    const fLen = clamp(P.muWet * N / 186) * 70;
+    arrow(px + 18, py + 4, px + 18, py - fLen, C.fric, 4); arrow(sx - 18, sy + 4, sx - 18, sy - fLen, C.fric, 4);
+  }
+  // h dimension
+  g.save(); g.strokeStyle = C.muted; g.setLineDash([5, 5]); g.lineWidth = 1.5;
+  g.beginPath(); g.moveTo(cx - hw - 70, sy); g.lineTo(px, sy); g.moveTo(cx - hw - 70, py); g.lineTo(px, py); g.stroke(); g.restore();
+  text("h = 100 mm", cx - hw - 190, (sy + py) / 2 + 7, 18, C.muted, 600);
+  readout(700, 60, [["Load lever L", (L * 1000).toFixed(0) + " mm", C.strap], ["Moment M = W·L", (P.W * L).toFixed(1) + " N·m"],
+                    ["Bite force N = M/h", N.toFixed(0) + " N", C.normal], ["Friction 2μN (μ = 0.30)", (2 * P.muWet * N).toFixed(0) + " N", C.fric],
+                    ["Weight W", "186 N", C.weight]]);
+  gauge(700, 360, 400, ratio, "Grip ÷ weight");
+  status(700, 438, slipping);
+  if (L > 0.165) text("locks at L = h / 2μ = 167 mm", 905, 468, 18, C.ok, 600, "left", clamp((t - 6) / 1));
+  const cap = t < 6.5
+    ? "Move the weight out on an arm. Now it tips the collar: pad and strap bite the bark h = 100 mm apart, with force N = W·L / h."
+    : "Grip is 2μN. Once the lever passes h / 2μ (167 mm on wet bark) the collar locks. Our robot's weight acts 267 mm out: 1.60× margin.";
+  caption(cap);
+});
+
+// 4. heavier grips harder
+add(8, (t) => {
+  const k = 1 + ease((t - 1.5) / 3);          // weight multiplier 1 -> 2
+  const W = P.W * k, N = W * P.Leff / P.h;
+  const s = 1100, cx = 330, hw = P.R * s * 0.5, yc = 300, tilt = 0.09;
+  trunk(cx, 40, 590, hw);
+  collar(cx, yc, s * 0.5, hw, P.Leff + 0.06, tilt, true);
+  const [wx, wy] = rotPt(cx, yc, P.Leff * s * 0.5 + 30, 0, tilt);
+  rrect(wx - 22 * Math.sqrt(k), wy + 40, 44 * Math.sqrt(k), 38 * Math.sqrt(k), 6, "#3e4a52");
+  arrow(wx, wy + 44 + 38 * Math.sqrt(k), wx, wy + 110 + 50 * k, C.weight, 5);
+  readout(700, 60, [["Weight W", W.toFixed(0) + " N", C.weight], ["Bite force N = W·L/h", N.toFixed(0) + " N", C.normal],
+                    ["Friction 2μN", (2 * P.muWet * N).toFixed(0) + " N", C.fric]]);
+  gauge(700, 300, 400, 2 * P.muWet * P.Leff / P.h, "Grip ÷ weight (does not change)");
+  status(700, 380, false);
+  caption("Double the weight and the bite force doubles too. The ratio never changes, so the collar cannot be overloaded into slipping. Heavier grips harder.", clamp((t - 0.4) / 0.8));
+});
+
+// 5. why the arm matters during the step (robot stays centred; the bark scrolls past)
+add(16, (t) => {
+  const s = 430, cx = 440, hw = P.R * s * 0.6, L = P.Larm;
+  const cycle = 8, tc = t % cycle, phaseA = tc < 4;        // A: upper moves, B: lower moves
+  const stroke = 0.392 * s, u = ease(((tc % 4) - 0.6) / 2.6);
+  const act = phaseA ? stroke * u : stroke * (1 - u);
+  const sep = 0.56 * s + act, mid = 320;
+  const yu = mid - sep / 2, yl = mid + sep / 2;
+  const climbed = Math.floor(t / cycle) * stroke + (phaseA ? u * stroke / 2 : stroke / 2 + u * stroke / 2);
+  trunk(cx, 30, 590, hw, climbed);
+  const tU = phaseA ? 0 : 0.08, tL = phaseA ? 0.08 : 0;
+  collar(cx, yu, s, hw, L, tU, !phaseA);
+  collar(cx, yl, s, hw, L, tL, phaseA);
+  const tipU = rotPt(cx, yu, L * s, 0, tU), tipL = rotPt(cx, yl, L * s, 0, tL);
+  const bodyLen = 0.44 * s;
+  rrect(tipU[0] - 11, tipU[1] + 16, 22, bodyLen, 5, "#7d8b99");
+  g.fillStyle = "#e8ecef"; g.fillRect(tipL[0] - 4, tipU[1] + 16 + bodyLen, 8, Math.max(0, tipL[1] - 16 - (tipU[1] + 16 + bodyLen)));
+  text("cylinder", tipU[0] + 22, tipU[1] + 16 + bodyLen / 2, 17, C.muted, 600);
+  const mov = phaseA ? tipU : tipL, anc = phaseA ? tipL : tipU;
+  const moving = (tc % 4) > 0.6 && (tc % 4) < 3.2;
+  if (moving) arrow(mov[0] + 120, mov[1] + 30, mov[0] + 120, mov[1] - 36, C.normal, 5);
+  arrow(anc[0] + 120, anc[1] - 20, anc[0] + 120, anc[1] + 44, C.weight, 5);
+  text(phaseA ? "UPPER collar" : "LOWER collar", mov[0] + 140, mov[1] - 8, 20, C.normal, 700);
+  text("strap released, pushed up under its arm: slides", mov[0] + 140, mov[1] + 18, 18, C.normal, 500);
+  text(phaseA ? "LOWER collar" : "UPPER collar", anc[0] + 140, anc[1] + 2, 20, C.weight, 700);
+  text("robot's weight hangs on its arm: tipped, locked", anc[0] + 140, anc[1] + 28, 18, C.weight, 500);
+  const capA = "The arm is also the handle. The cylinder pushes up under the moving collar's arm. That levels it, and with its strap released it slides up.";
+  const capB = "Then the roles swap. The upper collar takes the weight, tips and bites, while the lower one is pushed up by its arm. One arm locks and the other lets go.";
+  caption(t < 8 ? capA : capB);
+});
+
+// 6. the saw must stay over the arm side while climbing
+add(15, (t) => {
+  // top view: trunk circle, collar arm to the right, saw position moving around
+  const cx = 400, cy = 300, s = 440, R = P.R * s;
+  const swing = ease((t - 2.5) / 4);                              // stowed -> far side
+  const tension = ease((t - 9) / 1.5);
+  const ang = lerp(0.3, Math.PI - 0.1, swing);                    // angle of saw from +x
+  const xSaw = lerp(P.xStow, P.xFar, swing);
+  const M = lerp(P.Mstow, P.Mfar, swing);
+  const ratio = ratioOf(P.muWet, M, P.Nact * tension);
+  g.fillStyle = C.bark; g.beginPath(); g.arc(cx, cy, R, 0, Math.PI * 2); g.fill();
+  g.strokeStyle = tension > 0.5 ? C.strap : C.strap; g.lineWidth = 6 + 5 * tension; g.beginPath(); g.arc(cx, cy, R + 6, 0, Math.PI * 2); g.stroke();
+  rrect(cx + R + 4, cy - 34, 20, 68, 4, "#262d2b");
+  rrect(cx + R + 24, cy - 9, P.Larm * s - R - 24, 18, 5, C.metal);
+  text("collar arm", cx + P.Larm * s - 40, cy + 46, 18, C.muted, 600);
+  // tensioner on far side
+  rrect(cx - R - 40, cy - 16, 30, 32, 5, tension > 0.5 ? C.strap : "#3e4a52");
+  text("tensioner", cx - R - 130, cy + 54, 18, tension > 0.5 ? C.strap : C.muted, 600);
+  // saw on its boom
+  const rr = 0.7 * s, sxp = cx + Math.cos(ang) * rr, syp = cy - Math.sin(ang) * rr * 0.75;
+  g.strokeStyle = C.metal; g.lineWidth = 6; g.beginPath(); g.moveTo(cx + Math.cos(ang) * R, cy - Math.sin(ang) * R * 0.75); g.lineTo(sxp, syp); g.stroke();
+  g.fillStyle = C.saw; g.beginPath(); g.arc(sxp, syp, 30, 0, Math.PI * 2); g.fill();
+  text("saw", sxp, syp - 40, 18, C.saw, 700, "center");
+  // moment bar
+  readout(760, 40, [["Saw position", swing < 0.05 ? "parked over the arm" : swing > 0.95 ? "far side of trunk" : "swinging"],
+                    ["Tipping moment M", M.toFixed(1) + " N·m", M > 0 ? C.ok : C.bad],
+                    ["Tensioner", tension > 0.5 ? "pulling 684 N" : "slack", tension > 0.5 ? C.strap : C.muted]]);
+  gauge(760, 250, 340, ratio, "Upper collar grip ÷ weight (wet bark)");
+  status(760, 330, ratio < 1);
+  const cap = t < 2.5
+    ? "While climbing, the saw is parked over the arm side. Its weight adds to the tipping moment, so the collar bites harder: 1.60×."
+    : t < 9
+      ? "Swing the saw to the far side and its weight tips the collar the wrong way. The moment goes negative and self-locking alone gives no grip at all."
+      : "So at the crown, before the arm swings out, a lead screw pulls the strap tight. That gives 1.64× grip without any tipping.";
+  caption(cap);
+});
+
+// 7. summary
+add(9, (t) => {
+  text("Why the arm sticks out while climbing", 90, 130, 44, C.ink, 800, "left", clamp(t / 0.6));
+  const items = [
+    ["Grip.", "The arm puts the weight off-centre. That tips the collar so pad and strap bite: N = W·L / h."],
+    ["It scales.", "Heavier means a harder bite. On wet bark it locks once L passes 167 mm. Ours: 267 mm, 1.60×."],
+    ["It steps.", "Pushing up under an arm levels its collar so it slides. Hanging weight on it locks it."],
+    ["Saw parked.", "The saw sits over the arm side while climbing. At the crown the tensioner clamps first."],
+  ];
+  items.forEach(([h, b], i) => {
+    const a = clamp((t - 0.8 - i * 0.6) / 0.6), y = 230 + i * 92;
+    rrect(90, y - 38, 14, 54, 4, C.strap);
+    text(h, 126, y, 28, C.strap, 700, "left", a);
+    wrap(b, 330, y, 860, 24, C.ink, 500, 1.3, a);
+  });
+  text("coconut-harvester · concept v2 · numbers from coconut_harvester/inchworm.py", 90, 680, 16, C.muted, 500, "left", clamp((t - 3) / 1));
+});
+
+let acc = 0; scenes.forEach(sc => { sc.t0 = acc; acc += sc.d; });
+const TOTAL = acc;
+function draw(T) {
+  g.fillStyle = C.bg; g.fillRect(0, 0, 1280, 720);
+  const sc = scenes.find(x => T < x.t0 + x.d) || scenes[scenes.length - 1];
+  const t = T - sc.t0;
+  sc.f(t, sc.d);
+  // fade between scenes
+  const fadeIn = clamp(t / 0.35), fadeOut = clamp((sc.d - t) / 0.35), a = 1 - Math.min(fadeIn, fadeOut);
+  if (a > 0) { g.fillStyle = `rgba(16,22,26,${a})`; g.fillRect(0, 0, 1280, 720); }
+  // progress bar
+  g.fillStyle = "#22303a"; g.fillRect(0, 714, 1280, 6);
+  g.fillStyle = C.strap; g.fillRect(0, 714, 1280 * T / TOTAL, 6);
+}
+window.TOTAL = TOTAL; window.draw = draw;
+// live playback when opened in a browser
+if (!window.__RENDER__) {
+  let start = performance.now();
+  (function loop(now) { draw(((now - start) / 1000) % TOTAL); requestAnimationFrame(loop); })(start);
+}
+</script>

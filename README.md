@@ -11,6 +11,8 @@ The repo holds two concepts, compared head to head in the same models:
 
 **Interactive 3D model:** [`docs/robot_3d.html`](docs/robot_3d.html) (open in a browser).
 
+**Video: why the arm sticks out while climbing:** [`docs/video/why_the_arm.mp4`](docs/video/why_the_arm.mp4) (83 s; source `docs/video/why_the_arm.html`, regenerate with `node docs/video/render.js docs/video/why_the_arm.mp4`).
+
 **Full report:** [`docs/DESIGN.md`](docs/DESIGN.md), generated from the models: drawings, checks,
 comparison, sensitivity and safety.
 
